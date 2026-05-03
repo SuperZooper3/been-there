@@ -26,6 +26,7 @@ export default function MapApp() {
   const [mode, setMode] = useState<MapMode>("browse");
   const [zoom] = useState(13);
   const renderResolution = resolutionForZoom(zoom);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Visited cells: live Set for fast lookup
   const [visitedCells, setVisitedCells] = useState<Set<string>>(new Set());
@@ -48,14 +49,27 @@ export default function MapApp() {
   // Initial data load
   useEffect(() => {
     async function load() {
-      const [cellsRes, photosRes] = await Promise.all([
-        fetch(`/api/cells?zoom=13`),
-        fetch("/api/photos"),
-      ]);
-      const cellsData = await cellsRes.json();
-      const photosData = await photosRes.json();
-      if (cellsData.cells) setVisitedCells(new Set<string>(cellsData.cells));
-      if (photosData.photos) setPhotos(photosData.photos);
+      try {
+        const [cellsRes, photosRes] = await Promise.all([
+          fetch(`/api/cells?zoom=13`),
+          fetch("/api/photos"),
+        ]);
+        const cellsData = await cellsRes.json();
+        const photosData = await photosRes.json();
+        if (cellsData.error) {
+          console.error("cells load error:", cellsData.error);
+          if (cellsData.error.includes("relation") || cellsData.error.includes("path")) {
+            setLoadError("Database tables not found. Run the migration SQL in Supabase first.");
+          }
+        } else if (cellsData.cells) {
+          setVisitedCells(new Set<string>(cellsData.cells));
+        }
+        if (!photosData.error && photosData.photos) {
+          setPhotos(photosData.photos);
+        }
+      } catch (e) {
+        console.error("Failed to load map data:", e);
+      }
     }
     load();
   }, []);
@@ -252,6 +266,25 @@ export default function MapApp() {
 
   return (
     <div style={{ position: "relative", width: "100vw", height: "100dvh", overflow: "hidden" }}>
+      {loadError && (
+        <div style={{
+          position: "absolute",
+          top: 0, left: 0, right: 0,
+          zIndex: 50,
+          background: "#fef3cd",
+          borderBottom: "1px solid #f0c040",
+          padding: "10px 16px",
+          fontSize: 13,
+          color: "#7a5c00",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}>
+          <span>{loadError}</span>
+          <button onClick={() => setLoadError(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "#7a5c00" }}>✕</button>
+        </div>
+      )}
+
       <Map
         mode={mode}
         visitedCells={visitedCells}
