@@ -120,12 +120,24 @@ export default function Map({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update cell GeoJSON when visitedCells changes
+  // Update cell GeoJSON when visitedCells changes.
+  // If the style hasn't loaded yet (cells arrived before the map finished
+  // initialising), defer the setData call until the load event fires.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
-    const source = map.getSource(CELL_SOURCE) as GeoJSONSource | undefined;
-    source?.setData(buildGeoJSON(visitedCells));
+    if (!map) return;
+
+    const update = () => {
+      const source = map.getSource(CELL_SOURCE) as GeoJSONSource | undefined;
+      source?.setData(buildGeoJSON(visitedCells));
+    };
+
+    if (map.isStyleLoaded()) {
+      update();
+    } else {
+      map.once("load", update);
+      return () => { map.off("load", update); };
+    }
   }, [visitedCells, buildGeoJSON]);
 
   // Lock/unlock map pan based on mode

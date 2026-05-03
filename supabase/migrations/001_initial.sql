@@ -39,3 +39,7 @@ create policy "Users can manage own place_photos"
   on place_photos for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- Grant base table permissions to authenticated users (RLS then filters to own rows)
+grant select, insert, update, delete on table visit_cells to authenticated;
+grant select, insert, update, delete on table place_photos to authenticated;
