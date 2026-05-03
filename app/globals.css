@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+:root {
+  /* Palette: warm beige base, pastel accents */
+  --color-bg: #f5f0e8;
+  --color-surface: #faf7f2;
+  --color-border: #e8e0d0;
+  --color-text: #3d3530;
+  --color-text-muted: #8c7b6e;
+
+  /* Explored cell accent colors */
+  --color-teal: #7ec8c8;
+  --color-pink: #f0a0b0;
+  --color-orange: #f0b878;
+
+  /* Cell fill (semi-transparent over map) */
+  --cell-fill: rgba(126, 200, 200, 0.45);
+  --cell-fill-hover: rgba(126, 200, 200, 0.65);
+  --cell-stroke: rgba(126, 200, 200, 0.8);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* MapLibre resets */
+.maplibregl-map {
+  font-family: inherit;
+}
+
+.maplibregl-ctrl-attrib {
+  font-size: 10px;
+}
