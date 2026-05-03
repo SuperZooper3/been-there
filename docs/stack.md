@@ -5,14 +5,14 @@
 - Mapping: MapLibre + Stadia hosted OSM basemap.
 - Spatial indexing: H3 via `h3-js`, canonical storage at res-9.
 - Backend data: Supabase Postgres.
-- Auth: Supabase Auth with Google first, email magic link fallback.
+- Auth: Supabase Auth with email magic link only.
 - Media: Supabase Storage for image assets.
 
 ## Phase-by-phase implementation stack
 
 ### Phase 1 - MVP
 - Next.js UI and route handlers.
-- Supabase Auth, Postgres, and Storage integration.
+- Supabase Auth (magic link), Postgres, and Storage integration.
 - H3 paint/erase workflow with session-scoped undo/redo.
 - Polaroid-style photo pin rendering.
 

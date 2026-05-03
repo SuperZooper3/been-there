@@ -22,8 +22,8 @@ Before running the app you need to create accounts and configure three services.
 
 | Service | What it provides | Time |
 |---|---|---|
-| [Supabase](https://supabase.com) | Database, auth, and photo storage | ~10 min |
-| [Stadia Maps](https://stadiamaps.com) | Map tiles (OSM-based, no Google) | ~2 min |
+| [Supabase](https://supabase.com) | Database, email magic link auth, and photo storage | ~10 min |
+| [Stadia Maps](https://stadiamaps.com) | Map tiles — add your domain in their dashboard for production | ~2 min |
 | [Vercel](https://vercel.com) | Hosting and deployment | ~5 min |
 
 ### 3. Configure environment variables
@@ -32,15 +32,14 @@ Before running the app you need to create accounts and configure three services.
 cp .env.local.example .env.local
 ```
 
-Then fill in `.env.local` with values from your Supabase and Stadia dashboards:
+Then fill in `.env.local` with your Supabase values:
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-NEXT_PUBLIC_STADIA_API_KEY=your-stadia-key
 ```
 
-The Stadia key is only required for production. Local development works without it.
+No Stadia API key needed — Stadia authenticates browser apps by domain, which works automatically on localhost and in production.
 
 ### 4. Run the database migration
 
@@ -52,7 +51,7 @@ In the Supabase dashboard, go to **SQL Editor**, paste the contents of [`supabas
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). Enter your email address, click the link in your inbox, and you're in.
 
 ---
 
@@ -89,7 +88,7 @@ Full details in [`docs/manual-setup.md`](docs/manual-setup.md).
 | Map tiles | Stadia Maps (OSM-based) |
 | Spatial model | H3 hexagons (`h3-js`), stored at resolution 9 |
 | Database | Supabase Postgres |
-| Auth | Supabase Auth (Google OAuth + email magic link) |
+| Auth | Supabase Auth (email magic link) |
 | Photo storage | Supabase Storage |
 | PWA | `next-pwa` + `public/manifest.json` |
 

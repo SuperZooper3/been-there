@@ -5,7 +5,7 @@
 - Map stack: MapLibre with Stadia hosted OSM basemap.
 - Spatial model: H3, canonical storage at resolution 9.
 - Backend: Supabase (Postgres, Auth, Storage).
-- Auth: Google login first; email magic link fallback.
+- Auth: Supabase email magic link only.
 - MVP scope: single-user, manual map painting, polaroid photo pins.
 - Drawing behavior: single-cell precise paint, draw-lock pan, erase always, session-only undo/redo.
 - Feature order: manual MVP -> foreground GPS -> Strava/Garmin import -> social layers -> optional native background tracking.

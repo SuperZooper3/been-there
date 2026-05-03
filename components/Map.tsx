@@ -76,12 +76,9 @@ export default function Map({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const apiKey = process.env.NEXT_PUBLIC_STADIA_API_KEY;
-    const style = apiKey ? `${STADIA_STYLE}?api_key=${apiKey}` : STADIA_STYLE;
-
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style,
+      style: STADIA_STYLE,
       center: [-122.4194, 37.7749], // San Francisco default
       zoom: 13,
     });
