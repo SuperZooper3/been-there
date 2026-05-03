@@ -101,4 +101,4 @@ Open [http://localhost:3000](http://localhost:3000). Enter your email, check you
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase > Project Settings > API | Yes |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase > Project Settings > API | Yes |
 
-Stadia Maps requires no env var — it authenticates via domain in production and works on localhost with no setup.
+Stadia Maps requires no env var — it authenticates via domain in production and works on localhost with no setup
