@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { User } from "@supabase/supabase-js";
 import { createBrowserClient } from "@/lib/supabase-browser";
 import { resolutionForZoom } from "@/lib/h3";
 import {
@@ -20,11 +19,7 @@ import PinDropDialog from "./PinDropDialog";
 
 export type MapMode = "browse" | "draw" | "erase" | "pin";
 
-interface Props {
-  user: User;
-}
-
-export default function MapApp(_: Props) {
+export default function MapApp() {
   const supabase = createBrowserClient();
 
   // Map state
