@@ -45,6 +45,8 @@ export default function DrawControls({
   onUndo,
   onRedo,
 }: Props) {
+  const [hoveredButton, setHoveredButton] = useState<string | null>(null);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if typing in an input
@@ -71,6 +73,13 @@ export default function DrawControls({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onModeChange]);
+
+  const tooltips: Record<string, { label: string; key: string }> = {
+    browse: { label: "Browse / Pan", key: "H" },
+    draw: { label: "Paint Cells", key: "P" },
+    erase: { label: "Erase Cells", key: "E" },
+    pin: { label: "Drop Pin", key: "M" },
+  };
 
   return (
     <div
