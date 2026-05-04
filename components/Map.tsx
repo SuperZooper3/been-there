@@ -27,6 +27,8 @@ interface Props {
   onZoomChange: (zoom: number) => void;
   centerOn?: { lat: number; lng: number } | null;
   currentLocation?: { lat: number; lng: number } | null;
+  /** Debug: K+click on the map fires this with the clicked lat/lng as a fake location ping. */
+  onDebugLocation?: (lat: number, lng: number) => void;
 }
 
 export interface PhotoPin {
@@ -56,12 +58,15 @@ export default function Map({
   onZoomChange,
   centerOn,
   currentLocation,
+  onDebugLocation,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   // Use a plain object to avoid collision with maplibre-gl's exported `Map` class name
   const markersRef = useRef<Record<string, maplibregl.Marker>>({});
   const isPaintingRef = useRef(false);
+  // K key held → next map click fires a debug location ping instead of the normal action
+  const isKPressedRef = useRef(false);
 
   // Clustering state — all stored in refs so renderMarkers() can be a stable callback
   const clusterIndexRef = useRef<Supercluster<{ photoId: string }> | null>(null);
@@ -272,6 +277,24 @@ export default function Map({
     map.getCanvas().style.cursor = cursorMap[mode] ?? "grab";
   }, [mode]);
 
+  // Track K key for debug location pings (hold K + click to fake a GPS ping)
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key.toLowerCase() === "k" && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
+        isKPressedRef.current = true;
+      }
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.key.toLowerCase() === "k") isKPressedRef.current = false;
+    }
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, []);
+
   // Paint/erase pointer interactions
   useEffect(() => {
     const map = mapRef.current;
@@ -302,6 +325,11 @@ export default function Map({
     }
 
     function handleClick(e: MapMouseEvent) {
+      // K + click → debug location ping (overrides all other modes)
+      if (isKPressedRef.current) {
+        onDebugLocation?.(e.lngLat.lat, e.lngLat.lng);
+        return;
+      }
       if (mode !== "pin") return;
       onPinDrop(e.lngLat.lat, e.lngLat.lng);
     }
@@ -323,7 +351,7 @@ export default function Map({
       map.off("touchend", handleUp);
       map.off("click", handleClick);
     };
-  }, [mode, onCellPaint, onCellErase, onPinDrop, renderResolution]);
+  }, [mode, onCellPaint, onCellErase, onPinDrop, onDebugLocation, renderResolution]);
 
   // Keep onPinClick ref current
   useEffect(() => { onPinClickRef.current = onPinClick; }, [onPinClick]);

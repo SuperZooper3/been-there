@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { resolutionForZoom, snapToCell, cellToCenter } from "@/lib/h3";
+import { resolutionForZoom, snapToCell, cellToCenter, getCellsAlongLine } from "@/lib/h3";
 import {
   initialStack,
   pushAction,
@@ -49,6 +49,8 @@ export default function MapApp() {
   const [trackingDenied, setTrackingDenied] = useState(false);
   const trackingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const trackingElapsedRef = useRef(0);
+  // Previous ping location — used to interpolate cells along the path between pings
+  const prevLocationRef = useRef<{ lat: number; lng: number } | null>(null);
 
   // Batch paint queue: flush to API every 500ms
   const pendingPaintRef = useRef<Set<string>>(new Set());
@@ -268,7 +270,18 @@ export default function MapApp() {
 
   function applyLocation(lat: number, lng: number) {
     setCurrentLocation({ lat, lng });
-    handleCellPaint(snapToCell(lat, lng));
+    const newCell = snapToCell(lat, lng);
+
+    if (prevLocationRef.current) {
+      // Fill every cell the straight line between the previous and current ping crosses
+      const prevCell = snapToCell(prevLocationRef.current.lat, prevLocationRef.current.lng);
+      const pathCells = getCellsAlongLine(prevCell, newCell);
+      pathCells.forEach((cell) => handleCellPaint(cell));
+    } else {
+      handleCellPaint(newCell);
+    }
+
+    prevLocationRef.current = { lat, lng };
   }
 
   function startTracking() {
@@ -291,12 +304,13 @@ export default function MapApp() {
     setCurrentLocation(null);
     setTrackingProgress(0);
     trackingElapsedRef.current = 0;
+    prevLocationRef.current = null;
     if (trackingTimerRef.current) { clearInterval(trackingTimerRef.current); trackingTimerRef.current = null; }
   }
 
   useEffect(() => {
     if (!isTracking) return;
-    const INTERVAL_MS = 30_000;
+    const INTERVAL_MS = 60_000;
     const TICK_MS = 150;
     trackingTimerRef.current = setInterval(() => {
       trackingElapsedRef.current += TICK_MS;
@@ -374,6 +388,7 @@ export default function MapApp() {
         onZoomChange={setZoom}
         centerOn={initialCenter}
         currentLocation={currentLocation}
+        onDebugLocation={applyLocation}
       />
 
       <StatsPanel

@@ -1,4 +1,4 @@
-import { latLngToCell, cellToParent, cellToBoundary, cellToLatLng, gridDisk } from "h3-js";
+import { latLngToCell, cellToParent, cellToBoundary, cellToLatLng, gridDisk, gridPathCells } from "h3-js";
 
 export const DRAW_RESOLUTION = 9;
 
@@ -76,6 +76,20 @@ export function resolutionForZoom(zoom: number): number {
 export function cellToCenter(h3Index: string): { lat: number; lng: number } {
   const [lat, lng] = cellToLatLng(h3Index);
   return { lat, lng };
+}
+
+/**
+ * Return all H3 res-9 cells along the straight-line path between two cells.
+ * Used to fill gaps between consecutive location pings.
+ * Falls back to just the two endpoints if h3 can't compute the path.
+ */
+export function getCellsAlongLine(fromCell: string, toCell: string): string[] {
+  if (fromCell === toCell) return [fromCell];
+  try {
+    return gridPathCells(fromCell, toCell);
+  } catch {
+    return [fromCell, toCell];
+  }
 }
 
 /**
