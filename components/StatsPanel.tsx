@@ -3,10 +3,9 @@
 interface Props {
   cellCount: number;
   photoCount: number;
-  onSignOut: () => void;
 }
 
-export default function StatsPanel({ cellCount, photoCount, onSignOut }: Props) {
+export default function StatsPanel({ cellCount, photoCount }: Props) {
   return (
     <div
       style={{

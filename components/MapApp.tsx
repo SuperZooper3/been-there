@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { createBrowserClient } from "@/lib/supabase-browser";
 import { resolutionForZoom } from "@/lib/h3";
 import {
   initialStack,
@@ -20,8 +19,6 @@ import PinDropDialog from "./PinDropDialog";
 export type MapMode = "browse" | "draw" | "erase" | "pin";
 
 export default function MapApp() {
-  const supabase = createBrowserClient();
-
   // Map state
   const [mode, setMode] = useState<MapMode>("browse");
   const [zoom, setZoom] = useState(13);
@@ -259,11 +256,6 @@ export default function MapApp() {
     setSelectedPhoto(null);
   }
 
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-    window.location.href = "/login";
-  }
-
   return (
     <div style={{ position: "relative", width: "100vw", height: "100dvh", overflow: "hidden" }}>
       {loadError && (
@@ -300,7 +292,6 @@ export default function MapApp() {
       <StatsPanel
         cellCount={visitedCells.size}
         photoCount={photos.length}
-        onSignOut={handleSignOut}
       />
 
       <DrawControls

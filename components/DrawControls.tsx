@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import type { MapMode } from "./MapApp";
 import { canUndo, canRedo, type UndoRedoStack } from "@/lib/undoRedo";
+import { Hand, Pencil, Eraser, MapPin } from "lucide-react";
 
 interface Props {
   mode: MapMode;
@@ -69,7 +71,7 @@ export default function DrawControls({
         onClick={() => onModeChange("browse")}
         style={btn(mode === "browse")}
       >
-        <span>🤚</span>
+        <Hand size={20} />
       </button>
 
       {/* Draw */}
@@ -78,7 +80,7 @@ export default function DrawControls({
         onClick={() => onModeChange("draw")}
         style={btn(mode === "draw")}
       >
-        <span>✏️</span>
+        <Pencil size={20} />
       </button>
 
       {/* Erase */}
@@ -87,7 +89,7 @@ export default function DrawControls({
         onClick={() => onModeChange("erase")}
         style={btn(mode === "erase")}
       >
-        <span>🧹</span>
+        <Eraser size={20} />
       </button>
 
       {/* Pin */}
@@ -96,7 +98,7 @@ export default function DrawControls({
         onClick={() => onModeChange("pin")}
         style={btn(mode === "pin")}
       >
-        <span>📍</span>
+        <MapPin size={20} />
       </button>
 
       <div style={divider} />
