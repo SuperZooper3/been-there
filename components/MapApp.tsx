@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { resolutionForZoom, snapToCell, cellToCenter, getCellsAlongLine } from "@/lib/h3";
+import { resolutionForZoom, snapToCell, cellToCenter, getCellsAlongLine, getParentCell, DRAW_RESOLUTION } from "@/lib/h3";
 import {
   initialStack,
   pushAction,
@@ -56,6 +56,12 @@ export default function MapApp() {
   const pendingPaintRef = useRef<Set<string>>(new Set());
   const pendingEraseRef = useRef<Set<string>>(new Set());
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Stable refs so handleCellErase can read current values without re-creating
+  const renderResolutionRef = useRef(renderResolution);
+  useEffect(() => { renderResolutionRef.current = renderResolution; }, [renderResolution]);
+  const visitedCellsRef = useRef(visitedCells);
+  useEffect(() => { visitedCellsRef.current = visitedCells; }, [visitedCells]);
 
   // Initial data load
   useEffect(() => {
@@ -147,30 +153,52 @@ export default function MapApp() {
     []
   );
 
-  // Erase a single cell
+  // Erase cells. When zoomed out, erases every res-9 cell under the coarser
+  // render-resolution parent — making it easy to bulk-clear whole regions.
   const handleCellErase = useCallback(
     (h3Index: string) => {
+      const resolution = renderResolutionRef.current;
+      const current = visitedCellsRef.current;
+
+      // Determine which res-9 cells to remove
+      let cellsToErase: string[];
+      if (resolution >= DRAW_RESOLUTION) {
+        // Fully zoomed in — just the single cell
+        if (!current.has(h3Index)) return;
+        cellsToErase = [h3Index];
+      } else {
+        // Zoomed out — remove every visited child under the visible parent hex
+        const parent = getParentCell(h3Index, resolution);
+        cellsToErase = [...current].filter(
+          (c) => getParentCell(c, resolution) === parent
+        );
+        if (cellsToErase.length === 0) return;
+      }
+
       setVisitedCells((prev) => {
-        if (!prev.has(h3Index)) return prev;
         const next = new Set(prev);
-        next.delete(h3Index);
+        cellsToErase.forEach((c) => next.delete(c));
         return next;
       });
+
       setUndoStack((s) => {
         const last = s.past[s.past.length - 1];
         if (last?.type === "erase") {
-          if (last.cells.includes(h3Index)) return s;
+          // Merge into the current erase stroke, skipping already-recorded cells
+          const newCells = cellsToErase.filter((c) => !last.cells.includes(c));
+          if (newCells.length === 0) return s;
           return {
             ...s,
             past: [
               ...s.past.slice(0, -1),
-              { type: "erase", cells: [...last.cells, h3Index] },
+              { type: "erase", cells: [...last.cells, ...newCells] },
             ],
           };
         }
-        return pushAction(s, { type: "erase", cells: [h3Index] });
+        return pushAction(s, { type: "erase", cells: cellsToErase });
       });
-      pendingEraseRef.current.add(h3Index);
+
+      cellsToErase.forEach((c) => pendingEraseRef.current.add(c));
       scheduleFlushed();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
