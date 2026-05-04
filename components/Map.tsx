@@ -167,8 +167,8 @@ export default function Map({
         type: "fill",
         source: CELL_SOURCE,
         paint: {
-          "fill-color": "rgba(126, 200, 200, 0.3)",
-          "fill-opacity": 1,
+          "fill-color": "rgba(0, 0, 0, 0)",
+          "fill-opacity": 0,
         },
       });
 
@@ -177,7 +177,7 @@ export default function Map({
         type: "line",
         source: CELL_SOURCE,
         paint: {
-          "line-color": "rgba(126, 200, 200, 0.8)",
+          "line-color": "rgba(255, 255, 255, 0.25)",
           "line-width": 0.75,
         },
       });
