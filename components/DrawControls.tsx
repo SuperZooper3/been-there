@@ -13,25 +13,20 @@ interface Props {
 
 const btn = (active: boolean): React.CSSProperties => ({
   display: "flex",
-  flexDirection: "column",
   alignItems: "center",
-  gap: 2,
-  padding: "6px 12px",
+  justifyContent: "center",
+  width: 40,
+  height: 40,
+  padding: 0,
   borderRadius: 10,
   border: "none",
   cursor: "pointer",
-  fontSize: 18,
+  fontSize: 20,
   lineHeight: 1,
   background: active ? "var(--color-teal)" : "transparent",
   color: "var(--color-text)",
   transition: "background 0.15s",
-  whiteSpace: "nowrap" as const,
 });
-
-const label: React.CSSProperties = {
-  fontSize: 10,
-  color: "var(--color-text-muted)",
-};
 
 const divider: React.CSSProperties = {
   width: 1,
@@ -48,12 +43,6 @@ export default function DrawControls({
   onUndo,
   onRedo,
 }: Props) {
-  const inEditMode = mode === "draw" || mode === "erase";
-
-  function handleEditClick() {
-    // If already in edit mode, go back to browse; otherwise enter draw
-    onModeChange(inEditMode ? "browse" : "draw");
-  }
 
   return (
     <div
@@ -80,40 +69,26 @@ export default function DrawControls({
         onClick={() => onModeChange("browse")}
         style={btn(mode === "browse")}
       >
-        <span>✦</span>
-        <span style={label}>Browse</span>
+        <span>🤚</span>
       </button>
 
-      {/* Edit — collapses into Draw + Erase when active */}
-      {inEditMode ? (
-        <>
-          <button
-            title="Paint visited cells"
-            onClick={() => onModeChange("draw")}
-            style={btn(mode === "draw")}
-          >
-            <span>✏</span>
-            <span style={label}>Draw</span>
-          </button>
-          <button
-            title="Erase cells"
-            onClick={() => onModeChange("erase")}
-            style={btn(mode === "erase")}
-          >
-            <span>◻</span>
-            <span style={label}>Erase</span>
-          </button>
-        </>
-      ) : (
-        <button
-          title="Enter edit mode (draw or erase cells)"
-          onClick={handleEditClick}
-          style={btn(false)}
-        >
-          <span>✏</span>
-          <span style={label}>Edit</span>
-        </button>
-      )}
+      {/* Draw */}
+      <button
+        title="Paint visited cells"
+        onClick={() => onModeChange("draw")}
+        style={btn(mode === "draw")}
+      >
+        <span>✏️</span>
+      </button>
+
+      {/* Erase */}
+      <button
+        title="Erase cells"
+        onClick={() => onModeChange("erase")}
+        style={btn(mode === "erase")}
+      >
+        <span>🧹</span>
+      </button>
 
       {/* Pin */}
       <button
@@ -121,8 +96,7 @@ export default function DrawControls({
         onClick={() => onModeChange("pin")}
         style={btn(mode === "pin")}
       >
-        <span>◉</span>
-        <span style={label}>Pin</span>
+        <span>📍</span>
       </button>
 
       <div style={divider} />
@@ -133,34 +107,34 @@ export default function DrawControls({
         onClick={onUndo}
         disabled={!canUndo(undoStack)}
         style={{
-          padding: "6px 10px",
+          padding: "4px 6px",
           borderRadius: 10,
           border: "none",
           cursor: canUndo(undoStack) ? "pointer" : "default",
-          fontSize: 16,
+          fontSize: 20,
           background: "transparent",
           color: canUndo(undoStack) ? "var(--color-text)" : "var(--color-border)",
           transition: "color 0.15s",
         }}
       >
-        ↩
+        ⟲
       </button>
       <button
         title="Redo (⌘⇧Z)"
         onClick={onRedo}
         disabled={!canRedo(undoStack)}
         style={{
-          padding: "6px 10px",
+          padding: "4px 6px",
           borderRadius: 10,
           border: "none",
           cursor: canRedo(undoStack) ? "pointer" : "default",
-          fontSize: 16,
+          fontSize: 20,
           background: "transparent",
           color: canRedo(undoStack) ? "var(--color-text)" : "var(--color-border)",
           transition: "color 0.15s",
         }}
       >
-        ↪
+        ⟳
       </button>
     </div>
   );
