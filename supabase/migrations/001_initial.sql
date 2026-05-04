@@ -43,3 +43,25 @@ create policy "Users can manage own place_photos"
 -- Grant base table permissions to authenticated users (RLS then filters to own rows)
 grant select, insert, update, delete on table visit_cells to authenticated;
 grant select, insert, update, delete on table place_photos to authenticated;
+
+-- Storage policies for the "photos" bucket
+-- Files are stored as <user_id>/<timestamp>.<ext> so the first path segment is the uploader's ID.
+create policy "Users can upload own photos"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'photos'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
+
+create policy "Public read for photos"
+  on storage.objects for select
+  using (bucket_id = 'photos');
+
+create policy "Users can delete own photos"
+  on storage.objects for delete
+  to authenticated
+  using (
+    bucket_id = 'photos'
+    and auth.uid()::text = (storage.foldername(name))[1]
+  );
