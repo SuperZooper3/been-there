@@ -8,7 +8,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 // MapLibre 5.x namespace exports don't expose construct signatures via `import *`.
 // Cast to the correct interface to allow `new` calls.
 const NavigationControl = maplibregl.NavigationControl as unknown as new () => IControl;
-import { getCellBoundary, snapToCell } from "@/lib/h3";
+import { getCellBoundary, getParentCell, snapToCell, DRAW_RESOLUTION } from "@/lib/h3";
 import type { MapMode } from "./MapApp";
 
 const STADIA_STYLE =
@@ -23,6 +23,7 @@ interface Props {
   onPinDrop: (lat: number, lng: number) => void;
   onPinClick: (photo: PhotoPin) => void;
   renderResolution: number;
+  onZoomChange: (zoom: number) => void;
 }
 
 export interface PhotoPin {
@@ -47,6 +48,7 @@ export default function Map({
   onPinDrop,
   onPinClick,
   renderResolution,
+  onZoomChange,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -54,22 +56,32 @@ export default function Map({
   const markersRef = useRef<Record<string, maplibregl.Marker>>({});
   const isPaintingRef = useRef(false);
 
-  // Build GeoJSON from visited cells
+  // Build GeoJSON from visited cells, aggregating to the current render resolution.
+  // All cells are stored at res-9; when zoomed out we derive unique parent cells so
+  // any visited child causes its parent hex to light up.
   const buildGeoJSON = useCallback(
-    (cells: Set<string>): GeoJSON.FeatureCollection => ({
-      type: "FeatureCollection",
-      features: [...cells].map((h3Index) => ({
-        type: "Feature",
-        geometry: {
-          type: "Polygon",
-          coordinates: [
-            [...getCellBoundary(h3Index), getCellBoundary(h3Index)[0]],
-          ],
-        },
-        properties: { h3Index },
-      })),
-    }),
-    []
+    (cells: Set<string>): GeoJSON.FeatureCollection => {
+      const displayCells =
+        renderResolution < DRAW_RESOLUTION
+          ? [...new Set([...cells].map((h) => getParentCell(h, renderResolution)))]
+          : [...cells];
+
+      return {
+        type: "FeatureCollection",
+        features: displayCells.map((h3Index) => {
+          const boundary = getCellBoundary(h3Index);
+          return {
+            type: "Feature",
+            geometry: {
+              type: "Polygon",
+              coordinates: [[...boundary, boundary[0]]],
+            },
+            properties: { h3Index },
+          };
+        }),
+      };
+    },
+    [renderResolution]
   );
 
   // Initialise map
@@ -84,6 +96,10 @@ export default function Map({
     });
 
     map.addControl(new NavigationControl(), "top-right");
+
+    map.on("zoomend", () => {
+      onZoomChange(map.getZoom());
+    });
 
     map.on("load", () => {
       map.addSource(CELL_SOURCE, {

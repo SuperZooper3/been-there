@@ -24,7 +24,7 @@ export default function MapApp() {
 
   // Map state
   const [mode, setMode] = useState<MapMode>("browse");
-  const [zoom] = useState(13);
+  const [zoom, setZoom] = useState(13);
   const renderResolution = resolutionForZoom(zoom);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -294,6 +294,7 @@ export default function MapApp() {
         onPinDrop={handlePinDrop}
         onPinClick={setSelectedPhoto}
         renderResolution={renderResolution}
+        onZoomChange={setZoom}
       />
 
       <StatsPanel
