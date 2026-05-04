@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { MapMode } from "./MapApp";
 import { canUndo, canRedo, type UndoRedoStack } from "@/lib/undoRedo";
 import { Hand, Pencil, Eraser, MapPin } from "lucide-react";
@@ -45,6 +45,32 @@ export default function DrawControls({
   onUndo,
   onRedo,
 }: Props) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      switch (e.key.toLowerCase()) {
+        case "h":
+          onModeChange("browse");
+          break;
+        case "p":
+          onModeChange("draw");
+          break;
+        case "e":
+          onModeChange("erase");
+          break;
+        case "m":
+          onModeChange("pin");
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onModeChange]);
 
   return (
     <div
@@ -67,7 +93,7 @@ export default function DrawControls({
     >
       {/* Browse */}
       <button
-        title="Browse / pan map"
+        title="Browse / pan map (H)"
         onClick={() => onModeChange("browse")}
         style={btn(mode === "browse")}
       >
@@ -76,7 +102,7 @@ export default function DrawControls({
 
       {/* Draw */}
       <button
-        title="Paint visited cells"
+        title="Paint visited cells (P)"
         onClick={() => onModeChange("draw")}
         style={btn(mode === "draw")}
       >
@@ -85,7 +111,7 @@ export default function DrawControls({
 
       {/* Erase */}
       <button
-        title="Erase cells"
+        title="Erase cells (E)"
         onClick={() => onModeChange("erase")}
         style={btn(mode === "erase")}
       >
@@ -94,7 +120,7 @@ export default function DrawControls({
 
       {/* Pin */}
       <button
-        title="Drop a photo pin"
+        title="Drop a photo pin (M)"
         onClick={() => onModeChange("pin")}
         style={btn(mode === "pin")}
       >
