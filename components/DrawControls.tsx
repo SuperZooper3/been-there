@@ -11,12 +11,35 @@ interface Props {
   onRedo: () => void;
 }
 
-const modes: { id: MapMode; label: string; icon: string; title: string }[] = [
-  { id: "browse", label: "Browse", icon: "✦", title: "Browse / pan map" },
-  { id: "draw",   label: "Draw",   icon: "✏",  title: "Paint visited cells" },
-  { id: "erase",  label: "Erase",  icon: "◻",  title: "Erase cells" },
-  { id: "pin",    label: "Pin",    icon: "◉",  title: "Drop a photo pin" },
-];
+const btn = (active: boolean): React.CSSProperties => ({
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: 2,
+  padding: "6px 12px",
+  borderRadius: 10,
+  border: "none",
+  cursor: "pointer",
+  fontSize: 18,
+  lineHeight: 1,
+  background: active ? "var(--color-teal)" : "transparent",
+  color: "var(--color-text)",
+  transition: "background 0.15s",
+  whiteSpace: "nowrap" as const,
+});
+
+const label: React.CSSProperties = {
+  fontSize: 10,
+  color: "var(--color-text-muted)",
+};
+
+const divider: React.CSSProperties = {
+  width: 1,
+  height: 32,
+  background: "var(--color-border)",
+  margin: "0 2px",
+  flexShrink: 0,
+};
 
 export default function DrawControls({
   mode,
@@ -25,6 +48,13 @@ export default function DrawControls({
   onUndo,
   onRedo,
 }: Props) {
+  const inEditMode = mode === "draw" || mode === "erase";
+
+  function handleEditClick() {
+    // If already in edit mode, go back to browse; otherwise enter draw
+    onModeChange(inEditMode ? "browse" : "draw");
+  }
+
   return (
     <div
       style={{
@@ -44,42 +74,60 @@ export default function DrawControls({
         userSelect: "none",
       }}
     >
-      {modes.map(({ id, label, icon, title }) => (
+      {/* Browse */}
+      <button
+        title="Browse / pan map"
+        onClick={() => onModeChange("browse")}
+        style={btn(mode === "browse")}
+      >
+        <span>✦</span>
+        <span style={label}>Browse</span>
+      </button>
+
+      {/* Edit — collapses into Draw + Erase when active */}
+      {inEditMode ? (
+        <>
+          <button
+            title="Paint visited cells"
+            onClick={() => onModeChange("draw")}
+            style={btn(mode === "draw")}
+          >
+            <span>✏</span>
+            <span style={label}>Draw</span>
+          </button>
+          <button
+            title="Erase cells"
+            onClick={() => onModeChange("erase")}
+            style={btn(mode === "erase")}
+          >
+            <span>◻</span>
+            <span style={label}>Erase</span>
+          </button>
+        </>
+      ) : (
         <button
-          key={id}
-          title={title}
-          onClick={() => onModeChange(id)}
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 2,
-            padding: "6px 12px",
-            borderRadius: 10,
-            border: "none",
-            cursor: "pointer",
-            fontSize: 18,
-            lineHeight: 1,
-            background:
-              mode === id ? "var(--color-teal)" : "transparent",
-            color: "var(--color-text)",
-            transition: "background 0.15s",
-          }}
+          title="Enter edit mode (draw or erase cells)"
+          onClick={handleEditClick}
+          style={btn(false)}
         >
-          <span>{icon}</span>
-          <span style={{ fontSize: 10, color: "var(--color-text-muted)" }}>{label}</span>
+          <span>✏</span>
+          <span style={label}>Edit</span>
         </button>
-      ))}
+      )}
 
-      <div
-        style={{
-          width: 1,
-          height: 32,
-          background: "var(--color-border)",
-          margin: "0 2px",
-        }}
-      />
+      {/* Pin */}
+      <button
+        title="Drop a photo pin"
+        onClick={() => onModeChange("pin")}
+        style={btn(mode === "pin")}
+      >
+        <span>◉</span>
+        <span style={label}>Pin</span>
+      </button>
 
+      <div style={divider} />
+
+      {/* Undo / Redo — only shown while in edit mode */}
       <button
         title="Undo (⌘Z)"
         onClick={onUndo}

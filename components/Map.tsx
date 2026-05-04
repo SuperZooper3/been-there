@@ -156,10 +156,13 @@ export default function Map({
     }
   }, [visitedCells, buildGeoJSON]);
 
-  // Lock/unlock map pan based on mode
+  // Lock/unlock map pan and set canvas cursor based on mode.
+  // We set cursor on map.getCanvas() directly because MapLibre owns that
+  // element and overrides any CSS applied to the wrapper div.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+
     const lock = mode === "draw" || mode === "erase";
     if (lock) {
       map.dragPan.disable();
@@ -168,6 +171,14 @@ export default function Map({
       map.dragPan.enable();
       map.touchZoomRotate.enable();
     }
+
+    const cursorMap: Record<string, string> = {
+      browse: "grab",
+      draw:   "crosshair",
+      erase:  "cell",
+      pin:    "pointer",
+    };
+    map.getCanvas().style.cursor = cursorMap[mode] ?? "grab";
   }, [mode]);
 
   // Paint/erase pointer interactions
@@ -267,13 +278,10 @@ export default function Map({
     });
   }, [photos, onPinClick]);
 
-  const cursor =
-    mode === "draw" ? "crosshair" : mode === "erase" ? "cell" : mode === "pin" ? "copy" : "grab";
-
   return (
     <div
       ref={containerRef}
-      style={{ width: "100%", height: "100%", cursor }}
+      style={{ width: "100%", height: "100%" }}
     />
   );
 }
