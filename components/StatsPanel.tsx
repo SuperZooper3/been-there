@@ -40,23 +40,6 @@ export default function StatsPanel({ cellCount, photoCount, onSignOut }: Props) 
 
       <Stat label="cells" value={cellCount.toLocaleString()} color="var(--color-teal)" />
       <Stat label="photos" value={photoCount.toLocaleString()} color="var(--color-pink)" />
-
-      <div style={{ width: 1, height: 20, background: "var(--color-border)" }} />
-
-      <button
-        onClick={onSignOut}
-        title="Sign out"
-        style={{
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          fontSize: 12,
-          color: "var(--color-text-muted)",
-          padding: 0,
-        }}
-      >
-        out
-      </button>
     </div>
   );
 }
