@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import ServiceWorker from "@/components/ServiceWorker";
 
 export const metadata: Metadata = {
   title: "Been There",
@@ -27,7 +28,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <ServiceWorker />
+        {children}
+      </body>
     </html>
   );
 }
