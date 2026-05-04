@@ -5,21 +5,44 @@ import { useRef, useState } from "react";
 interface Props {
   lat: number;
   lng: number;
+  initialFile?: File;
   onConfirm: (file: File, caption: string) => void;
   onCancel: () => void;
 }
 
-export default function PinDropDialog({ lat, lng, onConfirm, onCancel }: Props) {
+export default function PinDropDialog({ lat, lng, initialFile, onConfirm, onCancel }: Props) {
   const [caption, setCaption] = useState("");
-  const [preview, setPreview] = useState<string | null>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(
+    initialFile ? URL.createObjectURL(initialFile) : null
+  );
+  const [file, setFile] = useState<File | null>(initialFile ?? null);
+  const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  function applyFile(f: File) {
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+  }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
-    if (!f) return;
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
+    if (f) applyFile(f);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f?.type.startsWith("image/")) applyFile(f);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -74,17 +97,22 @@ export default function PinDropDialog({ lat, lng, onConfirm, onCancel }: Props) 
         {/* Photo picker */}
         <div
           onClick={() => inputRef.current?.click()}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
           style={{
             width: "100%",
             aspectRatio: "1 / 1",
             background: preview ? "transparent" : "var(--color-bg)",
-            border: "2px dashed var(--color-border)",
+            border: `2px dashed ${dragging ? "var(--color-teal)" : "var(--color-border)"}`,
             borderRadius: 12,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             cursor: "pointer",
             overflow: "hidden",
+            transition: "border-color 0.15s",
+            outline: dragging ? "3px solid rgba(72,187,120,0.2)" : "none",
           }}
         >
           {preview ? (
@@ -94,7 +122,12 @@ export default function PinDropDialog({ lat, lng, onConfirm, onCancel }: Props) 
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           ) : (
-            <span style={{ fontSize: 28, color: "var(--color-text-muted)" }}>+</span>
+            <div style={{ textAlign: "center", pointerEvents: "none" }}>
+              <div style={{ fontSize: 28, color: "var(--color-text-muted)" }}>+</div>
+              <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 4 }}>
+                click or drag &amp; drop
+              </div>
+            </div>
           )}
         </div>
         <input

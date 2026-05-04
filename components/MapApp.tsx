@@ -15,6 +15,7 @@ import DrawControls from "./DrawControls";
 import StatsPanel from "./StatsPanel";
 import PolaroidPin from "./PolaroidPin";
 import PinDropDialog from "./PinDropDialog";
+import GeoUploadDialog from "./GeoUploadDialog";
 
 export type MapMode = "browse" | "draw" | "erase" | "pin";
 
@@ -37,6 +38,8 @@ export default function MapApp() {
   // UI state
   const [selectedPhoto, setSelectedPhoto] = useState<PhotoPin | null>(null);
   const [pendingPin, setPendingPin] = useState<{ lat: number; lng: number } | null>(null);
+  const [geoUploadOpen, setGeoUploadOpen] = useState(false);
+  const [manualPlaceFile, setManualPlaceFile] = useState<File | null>(null);
 
   // Batch paint queue: flush to API every 500ms
   const pendingPaintRef = useRef<Set<string>>(new Set());
@@ -247,7 +250,26 @@ export default function MapApp() {
     const data = await res.json();
     if (data.photo) setPhotos((prev) => [data.photo, ...prev]);
     setPendingPin(null);
+    setManualPlaceFile(null);
     setMode("browse");
+  }
+
+  async function handleGeoUploadSave(file: File, lat: number, lng: number, caption: string) {
+    setGeoUploadOpen(false);
+    const form = new FormData();
+    form.append("lat", String(lat));
+    form.append("lng", String(lng));
+    form.append("caption", caption);
+    form.append("file", file);
+    const res = await fetch("/api/photos", { method: "POST", body: form });
+    const data = await res.json();
+    if (data.photo) setPhotos((prev) => [data.photo, ...prev]);
+  }
+
+  function handleGeoUploadPlaceManually(file: File) {
+    setGeoUploadOpen(false);
+    setManualPlaceFile(file);
+    setMode("pin");
   }
 
   async function handleDeletePhoto(id: string) {
@@ -292,6 +314,7 @@ export default function MapApp() {
       <StatsPanel
         cellCount={visitedCells.size}
         photoCount={photos.length}
+        onUpload={() => setGeoUploadOpen(true)}
       />
 
       <DrawControls
@@ -314,8 +337,17 @@ export default function MapApp() {
         <PinDropDialog
           lat={pendingPin.lat}
           lng={pendingPin.lng}
+          initialFile={manualPlaceFile ?? undefined}
           onConfirm={handlePinConfirm}
-          onCancel={() => { setPendingPin(null); setMode("browse"); }}
+          onCancel={() => { setPendingPin(null); setManualPlaceFile(null); setMode("browse"); }}
+        />
+      )}
+
+      {geoUploadOpen && (
+        <GeoUploadDialog
+          onSave={handleGeoUploadSave}
+          onPlaceManually={handleGeoUploadPlaceManually}
+          onCancel={() => setGeoUploadOpen(false)}
         />
       )}
     </div>

@@ -1,11 +1,14 @@
 "use client";
 
+import { Camera } from "lucide-react";
+
 interface Props {
   cellCount: number;
   photoCount: number;
+  onUpload: () => void;
 }
 
-export default function StatsPanel({ cellCount, photoCount }: Props) {
+export default function StatsPanel({ cellCount, photoCount, onUpload }: Props) {
   return (
     <div
       style={{
@@ -39,6 +42,30 @@ export default function StatsPanel({ cellCount, photoCount }: Props) {
 
       <Stat label="cells" value={cellCount.toLocaleString()} color="var(--color-teal)" />
       <Stat label="photos" value={photoCount.toLocaleString()} color="var(--color-pink)" />
+
+      <div style={{ width: 1, height: 20, background: "var(--color-border)" }} />
+
+      <button
+        onClick={onUpload}
+        title="Upload geotagged photo"
+        style={{
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: "2px 4px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 2,
+          color: "var(--color-text)",
+          borderRadius: 6,
+        }}
+      >
+        <Camera size={16} />
+        <span style={{ fontSize: 9, fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>
+          Add Photo
+        </span>
+      </button>
     </div>
   );
 }
