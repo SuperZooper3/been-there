@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { resolutionForZoom } from "@/lib/h3";
+import { resolutionForZoom, snapToCell, cellToCenter } from "@/lib/h3";
 import {
   initialStack,
   pushAction,
@@ -40,6 +40,15 @@ export default function MapApp() {
   const [pendingPin, setPendingPin] = useState<{ lat: number; lng: number } | null>(null);
   const [geoUploadOpen, setGeoUploadOpen] = useState(false);
   const [manualPlaceFile, setManualPlaceFile] = useState<File | null>(null);
+  const [initialCenter, setInitialCenter] = useState<{ lat: number; lng: number } | null>(null);
+
+  // Location tracking
+  const [isTracking, setIsTracking] = useState(false);
+  const [trackingProgress, setTrackingProgress] = useState(0); // 0–100
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [trackingDenied, setTrackingDenied] = useState(false);
+  const trackingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const trackingElapsedRef = useRef(0);
 
   // Batch paint queue: flush to API every 500ms
   const pendingPaintRef = useRef<Set<string>>(new Set());
@@ -63,6 +72,9 @@ export default function MapApp() {
           }
         } else if (cellsData.cells) {
           setVisitedCells(new Set<string>(cellsData.cells));
+          if (cellsData.recentCell) {
+            setInitialCenter(cellToCenter(cellsData.recentCell));
+          }
         }
         if (!photosData.error && photosData.photos) {
           setPhotos(photosData.photos);
@@ -254,6 +266,57 @@ export default function MapApp() {
     setMode("browse");
   }
 
+  function applyLocation(lat: number, lng: number) {
+    setCurrentLocation({ lat, lng });
+    handleCellPaint(snapToCell(lat, lng));
+  }
+
+  function startTracking() {
+    if (!navigator.geolocation) { setTrackingDenied(true); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        applyLocation(pos.coords.latitude, pos.coords.longitude);
+        setIsTracking(true);
+        setTrackingDenied(false);
+        trackingElapsedRef.current = 0;
+        setTrackingProgress(0);
+      },
+      () => setTrackingDenied(true),
+      { enableHighAccuracy: true, timeout: 10_000 }
+    );
+  }
+
+  function stopTracking() {
+    setIsTracking(false);
+    setCurrentLocation(null);
+    setTrackingProgress(0);
+    trackingElapsedRef.current = 0;
+    if (trackingTimerRef.current) { clearInterval(trackingTimerRef.current); trackingTimerRef.current = null; }
+  }
+
+  useEffect(() => {
+    if (!isTracking) return;
+    const INTERVAL_MS = 30_000;
+    const TICK_MS = 150;
+    trackingTimerRef.current = setInterval(() => {
+      trackingElapsedRef.current += TICK_MS;
+      if (trackingElapsedRef.current >= INTERVAL_MS) {
+        trackingElapsedRef.current = 0;
+        setTrackingProgress(0);
+        navigator.geolocation.getCurrentPosition(
+          (pos) => applyLocation(pos.coords.latitude, pos.coords.longitude),
+          () => {} // silent miss, keep going
+        );
+      } else {
+        setTrackingProgress((trackingElapsedRef.current / INTERVAL_MS) * 100);
+      }
+    }, TICK_MS);
+    return () => {
+      if (trackingTimerRef.current) { clearInterval(trackingTimerRef.current); trackingTimerRef.current = null; }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTracking]);
+
   async function handleGeoUploadSave(file: File, lat: number, lng: number, caption: string) {
     setGeoUploadOpen(false);
     const form = new FormData();
@@ -309,12 +372,17 @@ export default function MapApp() {
         onPinClick={setSelectedPhoto}
         renderResolution={renderResolution}
         onZoomChange={setZoom}
+        centerOn={initialCenter}
+        currentLocation={currentLocation}
       />
 
       <StatsPanel
         cellCount={visitedCells.size}
         photoCount={photos.length}
         onUpload={() => setGeoUploadOpen(true)}
+        isTracking={isTracking}
+        trackingProgress={trackingProgress}
+        onToggleTracking={isTracking ? stopTracking : startTracking}
       />
 
       <DrawControls
@@ -349,6 +417,45 @@ export default function MapApp() {
           onPlaceManually={handleGeoUploadPlaceManually}
           onCancel={() => setGeoUploadOpen(false)}
         />
+      )}
+
+      {trackingDenied && (
+        <div
+          onClick={() => setTrackingDenied(false)}
+          style={{
+            position: "fixed", inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 200,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "white", borderRadius: 12, padding: "24px 28px",
+              maxWidth: 310, width: "90%",
+              boxShadow: "0 8px 40px rgba(0,0,0,0.25)", textAlign: "center",
+            }}
+          >
+            <div style={{ fontSize: 32, marginBottom: 10 }}>📍</div>
+            <p style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 600, color: "#1a1a1a" }}>
+              Location access denied
+            </p>
+            <p style={{ margin: "0 0 20px", fontSize: 13, color: "#666", lineHeight: 1.5 }}>
+              Been There couldn&apos;t access your location. You can paint visited areas manually using the draw tool instead.
+            </p>
+            <button
+              onClick={() => setTrackingDenied(false)}
+              style={{
+                width: "100%", padding: "10px 0", borderRadius: 8,
+                border: "none", background: "var(--color-orange)",
+                color: "var(--color-text)", fontWeight: 600, fontSize: 14, cursor: "pointer",
+              }}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

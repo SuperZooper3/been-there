@@ -15,10 +15,16 @@ export async function GET(request: NextRequest) {
   const zoom = Number(request.nextUrl.searchParams.get("zoom") ?? "13");
   const renderResolution = resolutionForZoom(zoom);
 
-  const { data, error } = await supabase
-    .from("visit_cells")
-    .select("h3_index")
-    .eq("user_id", user.id);
+  const [{ data, error }, { data: recentData }] = await Promise.all([
+    supabase.from("visit_cells").select("h3_index").eq("user_id", user.id),
+    supabase
+      .from("visit_cells")
+      .select("h3_index")
+      .eq("user_id", user.id)
+      .order("last_visited_at", { ascending: false })
+      .limit(1)
+      .single(),
+  ]);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -28,7 +34,11 @@ export async function GET(request: NextRequest) {
       ? (data ?? []).map((r) => r.h3_index)
       : [...new Set((data ?? []).map((r) => getParentCell(r.h3_index, renderResolution)))];
 
-  return NextResponse.json({ cells, resolution: renderResolution });
+  return NextResponse.json({
+    cells,
+    resolution: renderResolution,
+    recentCell: recentData?.h3_index ?? null,
+  });
 }
 
 /**

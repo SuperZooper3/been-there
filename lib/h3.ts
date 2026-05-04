@@ -1,4 +1,4 @@
-import { latLngToCell, cellToParent, cellToBoundary, gridDisk } from "h3-js";
+import { latLngToCell, cellToParent, cellToBoundary, cellToLatLng, gridDisk } from "h3-js";
 
 export const DRAW_RESOLUTION = 9;
 
@@ -68,6 +68,14 @@ export function resolutionForZoom(zoom: number): number {
     }
   }
   return 0;
+}
+
+/**
+ * Get the geographic centre of an H3 cell as { lat, lng }.
+ */
+export function cellToCenter(h3Index: string): { lat: number; lng: number } {
+  const [lat, lng] = cellToLatLng(h3Index);
+  return { lat, lng };
 }
 
 /**
