@@ -38,6 +38,8 @@ export interface PhotoPin {
 const CELL_SOURCE = "visited-cells";
 const CELL_LAYER = "visited-cells-fill";
 const CELL_BORDER_LAYER = "visited-cells-border";
+const DESAT_SOURCE = "desaturation-source";
+const DESAT_LAYER = "desaturation-layer";
 
 export default function Map({
   mode,
@@ -84,6 +86,39 @@ export default function Map({
     [renderResolution]
   );
 
+  // Build desaturation mask: world polygon with holes for visited cells
+  const buildDesaturationMask = useCallback(
+    (cells: Set<string>): GeoJSON.Feature => {
+      const displayCells =
+        renderResolution < DRAW_RESOLUTION
+          ? [...new Set([...cells].map((h) => getParentCell(h, renderResolution)))]
+          : [...cells];
+
+      const worldBounds = [
+        [-180, -85],
+        [180, -85],
+        [180, 85],
+        [-180, 85],
+        [-180, -85],
+      ];
+
+      const holes = displayCells.map((h3Index) => {
+        const boundary = getCellBoundary(h3Index);
+        return [...boundary, boundary[0]];
+      });
+
+      return {
+        type: "Feature",
+        geometry: {
+          type: "Polygon",
+          coordinates: [worldBounds, ...holes],
+        },
+        properties: {},
+      };
+    },
+    [renderResolution]
+  );
+
   // Initialise map
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -102,6 +137,26 @@ export default function Map({
     });
 
     map.on("load", () => {
+      // Boost saturation of the base map
+      map.getCanvas().style.filter = "saturate(2.5) contrast(1.15)";
+      
+      // Add desaturation mask source
+      map.addSource(DESAT_SOURCE, {
+        type: "geojson",
+        data: buildDesaturationMask(new Set()),
+      });
+
+      // Add desaturation layer
+      map.addLayer({
+        id: DESAT_LAYER,
+        type: "fill",
+        source: DESAT_SOURCE,
+        paint: {
+          "fill-color": "#808080",
+          "fill-opacity": 0.75,
+        },
+      });
+
       map.addSource(CELL_SOURCE, {
         type: "geojson",
         data: buildGeoJSON(new Set()),
@@ -112,7 +167,7 @@ export default function Map({
         type: "fill",
         source: CELL_SOURCE,
         paint: {
-          "fill-color": "rgba(126, 200, 200, 0.45)",
+          "fill-color": "rgba(126, 200, 200, 0.3)",
           "fill-opacity": 1,
         },
       });
@@ -136,16 +191,17 @@ export default function Map({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update cell GeoJSON when visitedCells changes.
-  // If the style hasn't loaded yet (cells arrived before the map finished
-  // initialising), defer the setData call until the load event fires.
+  // Update cell GeoJSON and desaturation mask when visitedCells changes.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
     const update = () => {
-      const source = map.getSource(CELL_SOURCE) as GeoJSONSource | undefined;
-      source?.setData(buildGeoJSON(visitedCells));
+      const cellSource = map.getSource(CELL_SOURCE) as GeoJSONSource | undefined;
+      const desatSource = map.getSource(DESAT_SOURCE) as GeoJSONSource | undefined;
+      
+      cellSource?.setData(buildGeoJSON(visitedCells));
+      desatSource?.setData(buildDesaturationMask(visitedCells));
     };
 
     if (map.isStyleLoaded()) {
@@ -154,7 +210,7 @@ export default function Map({
       map.once("load", update);
       return () => { map.off("load", update); };
     }
-  }, [visitedCells, buildGeoJSON]);
+  }, [visitedCells, buildGeoJSON, buildDesaturationMask]);
 
   // Lock/unlock map pan and set canvas cursor based on mode.
   // We set cursor on map.getCanvas() directly because MapLibre owns that
