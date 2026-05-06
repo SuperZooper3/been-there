@@ -460,11 +460,51 @@ export default function Map({
           box-shadow: 0 2px 8px rgba(0,0,0,0.18);
           border-radius: 2px; cursor: pointer;
           transform: rotate(${rotation}deg);
+          position: relative;
         `;
+
+        // Image container to hold both spinner and image
+        const imgContainer = document.createElement("div");
+        imgContainer.style.cssText = "width:100%;height:42px;position:relative;display:block;background:#f5f5f5;";
+
+        // Spinner wrapper for centering
+        const spinnerWrapper = document.createElement("div");
+        spinnerWrapper.style.cssText = `
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+        `;
+        
+        // Spinner
+        const spinner = document.createElement("div");
+        spinner.style.cssText = `
+          width: 16px;
+          height: 16px;
+          border: 2px solid #e0e0e0;
+          border-top-color: #999;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        `;
+        spinnerWrapper.appendChild(spinner);
+        imgContainer.appendChild(spinnerWrapper);
+
         const img = document.createElement("img");
         img.src = photo.url;
-        img.style.cssText = "width:100%;height:42px;object-fit:cover;display:block;";
-        el.appendChild(img);
+        img.style.cssText = "width:100%;height:42px;object-fit:cover;display:block;opacity:0;transition:opacity 0.2s;";
+        
+        img.onload = () => {
+          spinnerWrapper.remove();
+          img.style.opacity = "1";
+        };
+        
+        img.onerror = () => {
+          spinnerWrapper.remove();
+          img.style.opacity = "1";
+        };
+
+        imgContainer.appendChild(img);
+        el.appendChild(imgContainer);
         el.addEventListener("click", () => onPinClickRef.current(photo));
 
         const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })

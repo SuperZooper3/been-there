@@ -20,6 +20,7 @@ export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: P
   const [stage, setStage] = useState<Stage>({ type: "idle" });
   const [caption, setCaption] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function processFile(file: File) {
@@ -60,7 +61,8 @@ export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: P
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (stage.type !== "geolocated") return;
+    if (stage.type !== "geolocated" || submitting) return;
+    setSubmitting(true);
     onSave(stage.file, stage.lat, stage.lng, caption);
   }
 
@@ -205,6 +207,7 @@ export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: P
               </button>
               <button
                 type="submit"
+                disabled={submitting}
                 style={{
                   flex: 2,
                   padding: "10px 0",
@@ -212,12 +215,13 @@ export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: P
                   border: "none",
                   background: "var(--color-orange)",
                   color: "var(--color-text)",
-                  cursor: "pointer",
+                  cursor: submitting ? "default" : "pointer",
                   fontSize: 14,
                   fontWeight: 600,
+                  opacity: submitting ? 0.5 : 1,
                 }}
               >
-                Save pin
+                {submitting ? "Saving…" : "Save"}
               </button>
             </div>
           </>

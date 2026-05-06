@@ -17,6 +17,7 @@ export default function PinDropDialog({ lat, lng, initialFile, onConfirm, onCanc
   );
   const [file, setFile] = useState<File | null>(initialFile ?? null);
   const [dragging, setDragging] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function applyFile(f: File) {
@@ -47,7 +48,8 @@ export default function PinDropDialog({ lat, lng, initialFile, onConfirm, onCanc
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file) return;
+    if (!file || submitting) return;
+    setSubmitting(true);
     onConfirm(file, caption);
   }
 
@@ -174,7 +176,7 @@ export default function PinDropDialog({ lat, lng, initialFile, onConfirm, onCanc
           </button>
           <button
             type="submit"
-            disabled={!file}
+            disabled={!file || submitting}
             style={{
               flex: 2,
               padding: "10px 0",
@@ -182,13 +184,13 @@ export default function PinDropDialog({ lat, lng, initialFile, onConfirm, onCanc
               border: "none",
               background: "var(--color-orange)",
               color: "var(--color-text)",
-              cursor: file ? "pointer" : "default",
+              cursor: file && !submitting ? "pointer" : "default",
               fontSize: 14,
               fontWeight: 600,
-              opacity: file ? 1 : 0.5,
+              opacity: file && !submitting ? 1 : 0.5,
             }}
           >
-            Save pin
+            {submitting ? "Saving…" : "Save"}
           </button>
         </div>
       </form>
