@@ -88,7 +88,7 @@ export default function PinDropDialog({ lat, lng, initialFile, onConfirm, onCanc
             color: "var(--color-text)",
           }}
         >
-          Drop a pin
+          Drop a Pin
         </h2>
         <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)" }}>
           {lat.toFixed(5)}, {lng.toFixed(5)}

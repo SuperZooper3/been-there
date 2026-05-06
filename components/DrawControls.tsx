@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { MapMode } from "./MapApp";
-import { canUndo, canRedo, type UndoRedoStack } from "@/lib/undoRedo";
-import { MousePointer, Pencil, Eraser, MapPin } from "lucide-react";
+import type { UndoRedoStack } from "@/lib/undoRedo";
+import { MousePointer, Pencil, Eraser, MapPin, Camera } from "lucide-react";
 
 interface Props {
   mode: MapMode;
@@ -11,6 +11,7 @@ interface Props {
   undoStack: UndoRedoStack;
   onUndo: () => void;
   onRedo: () => void;
+  onUploadPhoto: () => void;
 }
 
 const btn = (active: boolean): React.CSSProperties => ({
@@ -30,20 +31,13 @@ const btn = (active: boolean): React.CSSProperties => ({
   transition: "background 0.15s",
 });
 
-const divider: React.CSSProperties = {
-  width: 1,
-  height: 32,
-  background: "var(--color-border)",
-  margin: "0 2px",
-  flexShrink: 0,
-};
-
 export default function DrawControls({
   mode,
   onModeChange,
   undoStack,
   onUndo,
   onRedo,
+  onUploadPhoto,
 }: Props) {
   const [hoveredButton, setHoveredButton] = useState<string | null>(null);
 
@@ -67,18 +61,22 @@ export default function DrawControls({
         case "m":
           onModeChange("pin");
           break;
+        case "u":
+          onUploadPhoto();
+          break;
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onModeChange]);
+  }, [onModeChange, onUploadPhoto]);
 
   const tooltips: Record<string, { label: string; key: string }> = {
     browse: { label: "Pan", key: "H" },
     draw: { label: "Paint", key: "P" },
     erase: { label: "Erase", key: "E" },
     pin: { label: "Pin", key: "M" },
+    upload: { label: "Upload Photo", key: "U" },
   };
 
   return (
@@ -272,43 +270,48 @@ export default function DrawControls({
         )}
       </div>
 
-      <div style={divider} />
-
-      {/* Undo / Redo — only shown while in edit mode */}
-      <button
-        title="Undo (⌘Z)"
-        onClick={onUndo}
-        disabled={!canUndo(undoStack)}
-        style={{
-          padding: "4px 6px",
-          borderRadius: 10,
-          border: "none",
-          cursor: canUndo(undoStack) ? "pointer" : "default",
-          fontSize: 20,
-          background: "transparent",
-          color: canUndo(undoStack) ? "var(--color-text)" : "var(--color-border)",
-          transition: "color 0.15s",
-        }}
-      >
-        ⟲
-      </button>
-      <button
-        title="Redo (⌘⇧Z)"
-        onClick={onRedo}
-        disabled={!canRedo(undoStack)}
-        style={{
-          padding: "4px 6px",
-          borderRadius: 10,
-          border: "none",
-          cursor: canRedo(undoStack) ? "pointer" : "default",
-          fontSize: 20,
-          background: "transparent",
-          color: canRedo(undoStack) ? "var(--color-text)" : "var(--color-border)",
-          transition: "color 0.15s",
-        }}
-      >
-        ⟳
-      </button>
+      {/* Upload Photo */}
+      <div style={{ position: "relative" }}>
+        <button
+          onClick={onUploadPhoto}
+          onMouseEnter={() => setHoveredButton("upload")}
+          onMouseLeave={() => setHoveredButton(null)}
+          style={btn(false)}
+        >
+          <Camera size={20} />
+        </button>
+        {hoveredButton === "upload" && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: "calc(100% + 8px)",
+              left: "50%",
+              transform: "translateX(-50%)",
+              background: "var(--color-text)",
+              color: "var(--color-surface)",
+              padding: "6px 10px",
+              borderRadius: 8,
+              fontSize: 13,
+              whiteSpace: "nowrap",
+              pointerEvents: "none",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+            }}
+          >
+            {tooltips.upload.label}{" "}
+            <kbd
+              style={{
+                background: "rgba(255,255,255,0.2)",
+                padding: "2px 6px",
+                borderRadius: 4,
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              {tooltips.upload.key}
+            </kbd>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

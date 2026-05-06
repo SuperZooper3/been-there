@@ -2,13 +2,9 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import * as maplibregl from "maplibre-gl";
-import type { GeoJSONSource, IControl, MapMouseEvent, MapTouchEvent } from "maplibre-gl";
+import type { GeoJSONSource, MapMouseEvent, MapTouchEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import Supercluster from "supercluster";
-
-// MapLibre 5.x namespace exports don't expose construct signatures via `import *`.
-// Cast to the correct interface to allow `new` calls.
-const NavigationControl = maplibregl.NavigationControl as unknown as new () => IControl;
 import { getCellBoundary, getParentCell, snapToCell, DRAW_RESOLUTION } from "@/lib/h3";
 import type { MapMode } from "./MapApp";
 
@@ -150,8 +146,6 @@ export default function Map({
       center: [-122.4194, 37.7749], // San Francisco default
       zoom: 13,
     });
-
-    map.addControl(new NavigationControl(), "top-right");
 
     map.on("zoomend", () => {
       onZoomChange(map.getZoom());

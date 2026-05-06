@@ -25,6 +25,7 @@ export default function MapApp() {
   const [zoom, setZoom] = useState(13);
   const renderResolution = resolutionForZoom(zoom);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Visited cells: live Set for fast lookup
   const [visitedCells, setVisitedCells] = useState<Set<string>>(new Set());
@@ -89,6 +90,8 @@ export default function MapApp() {
         }
       } catch (e) {
         console.error("Failed to load map data:", e);
+      } finally {
+        setIsLoading(false);
       }
     }
     load();
@@ -426,6 +429,7 @@ export default function MapApp() {
         isTracking={isTracking}
         trackingProgress={trackingProgress}
         onToggleTracking={isTracking ? stopTracking : startTracking}
+        isLoading={isLoading}
       />
 
       <DrawControls
@@ -434,6 +438,7 @@ export default function MapApp() {
         undoStack={undoStack}
         onUndo={handleUndo}
         onRedo={handleRedo}
+        onUploadPhoto={() => setGeoUploadOpen(true)}
       />
 
       {selectedPhoto && (

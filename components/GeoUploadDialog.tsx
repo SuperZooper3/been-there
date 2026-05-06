@@ -94,7 +94,7 @@ export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: P
         }}
       >
         <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: "var(--color-text)" }}>
-          Upload photo
+          Upload Photo
         </h2>
 
         {/* Drop zone / preview */}

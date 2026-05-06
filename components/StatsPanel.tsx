@@ -1,7 +1,5 @@
 "use client";
 
-import { Camera } from "lucide-react";
-
 const SIZE = 34;
 const R = 14;
 const CIRC = 2 * Math.PI * R;
@@ -13,6 +11,7 @@ interface Props {
   isTracking: boolean;
   trackingProgress: number; // 0–100
   onToggleTracking: () => void;
+  isLoading?: boolean;
 }
 
 export default function StatsPanel({
@@ -22,6 +21,7 @@ export default function StatsPanel({
   isTracking,
   trackingProgress,
   onToggleTracking,
+  isLoading = false,
 }: Props) {
   const dashOffset = CIRC * (1 - trackingProgress / 100);
 
@@ -56,26 +56,8 @@ export default function StatsPanel({
 
       <div style={{ width: 1, height: 20, background: "var(--color-border)" }} />
 
-      <Stat label="cells" value={cellCount.toLocaleString()} color="var(--color-teal)" />
-      <Stat label="photos" value={photoCount.toLocaleString()} color="var(--color-pink)" />
-
-      <div style={{ width: 1, height: 20, background: "var(--color-border)" }} />
-
-      {/* Add Photo */}
-      <button
-        onClick={onUpload}
-        title="Upload geotagged photo"
-        style={{
-          background: "none", border: "none", cursor: "pointer",
-          padding: "2px 4px", display: "flex", flexDirection: "column",
-          alignItems: "center", gap: 2, color: "var(--color-text)", borderRadius: 6,
-        }}
-      >
-        <Camera size={16} />
-        <span style={{ fontSize: 9, fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1 }}>
-          Add Photo
-        </span>
-      </button>
+      <Stat label="cells" value={cellCount.toLocaleString()} color="var(--color-teal)" isLoading={isLoading} />
+      <Stat label="photos" value={photoCount.toLocaleString()} color="var(--color-pink)" isLoading={isLoading} />
 
       <div style={{ width: 1, height: 20, background: "var(--color-border)" }} />
 
@@ -132,10 +114,23 @@ export default function StatsPanel({
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: string; color: string }) {
+function Stat({ label, value, color, isLoading }: { label: string; value: string; color: string; isLoading?: boolean }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
-      <span style={{ fontSize: 14, fontWeight: 600, color }}>{value}</span>
+      {isLoading ? (
+        <div
+          style={{
+            width: 14,
+            height: 14,
+            border: "2px solid var(--color-border)",
+            borderTopColor: color,
+            borderRadius: "50%",
+            animation: "spin 0.8s linear infinite",
+          }}
+        />
+      ) : (
+        <span style={{ fontSize: 14, fontWeight: 600, color }}>{value}</span>
+      )}
       <span style={{ fontSize: 10, color: "var(--color-text-muted)" }}>{label}</span>
     </div>
   );
