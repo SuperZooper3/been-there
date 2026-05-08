@@ -123,10 +123,15 @@ export default function Map({
   const updateSourcesRef = useRef<() => void>(() => {});
   updateSourcesRef.current = () => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map) return;
+    const cellSource = map.getSource(CELL_SOURCE) as GeoJSONSource | undefined;
+    const desatSource = map.getSource(DESAT_SOURCE) as GeoJSONSource | undefined;
+    // Sources are added inside the map's 'load' handler. If they don't exist
+    // yet, bail — the 'load' handler will call this again once ready.
+    if (!cellSource || !desatSource) return;
     const dc = computeDisplayCells(visitedCellsRef.current, internalResRef.current);
-    (map.getSource(CELL_SOURCE) as GeoJSONSource | undefined)?.setData(makeCellGeoJSON(dc));
-    (map.getSource(DESAT_SOURCE) as GeoJSONSource | undefined)?.setData(makeDesatMask(dc));
+    cellSource.setData(makeCellGeoJSON(dc));
+    desatSource.setData(makeDesatMask(dc));
   };
 
   // Keep visitedCells ref in sync and immediately push a source update.
