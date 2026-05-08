@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import type { MapMode } from "./MapApp";
 import type { UndoRedoStack } from "@/lib/undoRedo";
-import { MousePointer, Pencil, Eraser, MapPin, Camera } from "lucide-react";
+import { MousePointer, Camera, Pencil, Eraser } from "lucide-react";
 
 interface Props {
   mode: MapMode;
@@ -12,16 +12,18 @@ interface Props {
   onUndo: () => void;
   onRedo: () => void;
   onUploadPhoto: () => void;
+  /** When true, show draw + erase buttons (unlocked after location denial) */
+  drawUnlocked?: boolean;
 }
 
 const btn = (active: boolean): React.CSSProperties => ({
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  width: 40,
-  height: 40,
+  width: 44,
+  height: 44,
   padding: 0,
-  borderRadius: 10,
+  borderRadius: 12,
   border: "none",
   cursor: "pointer",
   fontSize: 20,
@@ -29,55 +31,43 @@ const btn = (active: boolean): React.CSSProperties => ({
   background: active ? "var(--color-teal)" : "transparent",
   color: "var(--color-text)",
   transition: "background 0.15s",
+  touchAction: "manipulation",
+  WebkitTapHighlightColor: "transparent" as React.CSSProperties["WebkitTapHighlightColor"],
 });
+
+const divider = (
+  <div style={{ width: 1, height: 24, background: "var(--color-border)" }} />
+);
 
 export default function DrawControls({
   mode,
   onModeChange,
-  undoStack,
   onUndo,
   onRedo,
   onUploadPhoto,
+  drawUnlocked = false,
 }: Props) {
-  const [hoveredButton, setHoveredButton] = useState<string | null>(null);
+  const cameraActive = mode === "pin";
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in an input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
       switch (e.key.toLowerCase()) {
-        case "h":
-          onModeChange("browse");
-          break;
-        case "p":
-          onModeChange("draw");
-          break;
-        case "e":
-          onModeChange("erase");
-          break;
-        case "m":
-          onModeChange("pin");
-          break;
-        case "u":
-          onUploadPhoto();
-          break;
+        case "h": onModeChange("browse"); break;
+        case "p": onModeChange("draw"); break;
+        case "e": onModeChange("erase"); break;
+        case "m": onModeChange("pin"); break;
+        case "u": onUploadPhoto(); break;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) onRedo(); else onUndo();
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onModeChange, onUploadPhoto]);
-
-  const tooltips: Record<string, { label: string; key: string }> = {
-    browse: { label: "Pan", key: "H" },
-    draw: { label: "Paint", key: "P" },
-    erase: { label: "Erase", key: "E" },
-    pin: { label: "Pin", key: "M" },
-    upload: { label: "Upload Photo", key: "U" },
-  };
+  }, [onModeChange, onUploadPhoto, onUndo, onRedo]);
 
   return (
     <div
@@ -88,227 +78,77 @@ export default function DrawControls({
         transform: "translateX(-50%)",
         display: "flex",
         alignItems: "center",
-        gap: 6,
+        gap: 4,
         background: "var(--color-surface)",
         border: "1px solid var(--color-border)",
-        borderRadius: 16,
+        borderRadius: 18,
         padding: "6px 8px",
         boxShadow: "0 4px 16px rgba(0,0,0,0.10)",
         zIndex: 10,
         userSelect: "none",
       }}
     >
-      {/* Browse */}
-      <div style={{ position: "relative" }}>
-        <button
-          onClick={() => onModeChange("browse")}
-          onMouseEnter={() => setHoveredButton("browse")}
-          onMouseLeave={() => setHoveredButton(null)}
-          style={btn(mode === "browse")}
-        >
-          <MousePointer size={20} />
-        </button>
-        {hoveredButton === "browse" && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: "calc(100% + 8px)",
-              left: "50%",
-              transform: "translateX(-50%)",
-              background: "var(--color-text)",
-              color: "var(--color-surface)",
-              padding: "6px 10px",
-              borderRadius: 8,
-              fontSize: 13,
-              whiteSpace: "nowrap",
-              pointerEvents: "none",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-            }}
-          >
-            {tooltips.browse.label}{" "}
-            <kbd
-              style={{
-                background: "rgba(255,255,255,0.2)",
-                padding: "2px 6px",
-                borderRadius: 4,
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              {tooltips.browse.key}
-            </kbd>
-          </div>
-        )}
-      </div>
+      {/* Browse / pan — also active during draw/erase so it looks like a "base" state */}
+      <button
+        onClick={() => onModeChange("browse")}
+        title="Pan map (H)"
+        style={btn(!drawUnlocked
+          ? mode === "browse" || mode === "draw" || mode === "erase"
+          : mode === "browse")}
+      >
+        <MousePointer size={20} />
+      </button>
 
-      {/* Draw */}
-      <div style={{ position: "relative" }}>
-        <button
-          onClick={() => onModeChange("draw")}
-          onMouseEnter={() => setHoveredButton("draw")}
-          onMouseLeave={() => setHoveredButton(null)}
-          style={btn(mode === "draw")}
-        >
-          <Pencil size={20} />
-        </button>
-        {hoveredButton === "draw" && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: "calc(100% + 8px)",
-              left: "50%",
-              transform: "translateX(-50%)",
-              background: "var(--color-text)",
-              color: "var(--color-surface)",
-              padding: "6px 10px",
-              borderRadius: 8,
-              fontSize: 13,
-              whiteSpace: "nowrap",
-              pointerEvents: "none",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-            }}
+      {/* Draw + Erase — only visible after the user unlocks manual drawing */}
+      {drawUnlocked && (
+        <>
+          {divider}
+          <button
+            onClick={() => onModeChange("draw")}
+            title="Paint cells (P)"
+            style={btn(mode === "draw")}
           >
-            {tooltips.draw.label}{" "}
-            <kbd
-              style={{
-                background: "rgba(255,255,255,0.2)",
-                padding: "2px 6px",
-                borderRadius: 4,
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              {tooltips.draw.key}
-            </kbd>
-          </div>
-        )}
-      </div>
-
-      {/* Erase */}
-      <div style={{ position: "relative" }}>
-        <button
-          onClick={() => onModeChange("erase")}
-          onMouseEnter={() => setHoveredButton("erase")}
-          onMouseLeave={() => setHoveredButton(null)}
-          style={btn(mode === "erase")}
-        >
-          <Eraser size={20} />
-        </button>
-        {hoveredButton === "erase" && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: "calc(100% + 8px)",
-              left: "50%",
-              transform: "translateX(-50%)",
-              background: "var(--color-text)",
-              color: "var(--color-surface)",
-              padding: "6px 10px",
-              borderRadius: 8,
-              fontSize: 13,
-              whiteSpace: "nowrap",
-              pointerEvents: "none",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-            }}
+            <Pencil size={20} />
+          </button>
+          <button
+            onClick={() => onModeChange("erase")}
+            title="Erase cells (E)"
+            style={btn(mode === "erase")}
           >
-            {tooltips.erase.label}{" "}
-            <kbd
-              style={{
-                background: "rgba(255,255,255,0.2)",
-                padding: "2px 6px",
-                borderRadius: 4,
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              {tooltips.erase.key}
-            </kbd>
-          </div>
-        )}
-      </div>
+            <Eraser size={20} />
+          </button>
+        </>
+      )}
 
-      {/* Pin */}
-      <div style={{ position: "relative" }}>
-        <button
-          onClick={() => onModeChange("pin")}
-          onMouseEnter={() => setHoveredButton("pin")}
-          onMouseLeave={() => setHoveredButton(null)}
-          style={btn(mode === "pin")}
-        >
-          <MapPin size={20} />
-        </button>
-        {hoveredButton === "pin" && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: "calc(100% + 8px)",
-              left: "50%",
-              transform: "translateX(-50%)",
-              background: "var(--color-text)",
-              color: "var(--color-surface)",
-              padding: "6px 10px",
-              borderRadius: 8,
-              fontSize: 13,
-              whiteSpace: "nowrap",
-              pointerEvents: "none",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-            }}
-          >
-            {tooltips.pin.label}{" "}
-            <kbd
-              style={{
-                background: "rgba(255,255,255,0.2)",
-                padding: "2px 6px",
-                borderRadius: 4,
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              {tooltips.pin.key}
-            </kbd>
-          </div>
-        )}
-      </div>
+      {divider}
 
-      {/* Upload Photo */}
-      <div style={{ position: "relative" }}>
+      {/* Camera / photo upload */}
+      <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
         <button
           onClick={onUploadPhoto}
-          onMouseEnter={() => setHoveredButton("upload")}
-          onMouseLeave={() => setHoveredButton(null)}
-          style={btn(false)}
+          title="Upload photo (U)"
+          style={btn(cameraActive)}
         >
           <Camera size={20} />
         </button>
-        {hoveredButton === "upload" && (
+        {cameraActive && (
           <div
             style={{
               position: "absolute",
-              bottom: "calc(100% + 8px)",
+              bottom: "calc(100% + 10px)",
               left: "50%",
               transform: "translateX(-50%)",
               background: "var(--color-text)",
               color: "var(--color-surface)",
               padding: "6px 10px",
               borderRadius: 8,
-              fontSize: 13,
+              fontSize: 12,
               whiteSpace: "nowrap",
               pointerEvents: "none",
               boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
             }}
           >
-            {tooltips.upload.label}{" "}
-            <kbd
-              style={{
-                background: "rgba(255,255,255,0.2)",
-                padding: "2px 6px",
-                borderRadius: 4,
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              {tooltips.upload.key}
-            </kbd>
+            Tap the map to place your photo
           </div>
         )}
       </div>

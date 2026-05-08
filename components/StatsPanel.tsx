@@ -10,8 +10,10 @@ interface Props {
   onUpload: () => void;
   isTracking: boolean;
   trackingProgress: number; // 0–100
+  /** Toggle tracking on/off. When denied the parent handles showing a modal. */
   onToggleTracking: () => void;
   isLoading?: boolean;
+  trackingDenied?: boolean;
 }
 
 export default function StatsPanel({
@@ -22,8 +24,24 @@ export default function StatsPanel({
   trackingProgress,
   onToggleTracking,
   isLoading = false,
+  trackingDenied = false,
 }: Props) {
   const dashOffset = CIRC * (1 - trackingProgress / 100);
+
+  const dotBg = trackingDenied && !isTracking
+    ? "var(--color-orange)"
+    : isTracking
+    ? "#e53e3e"
+    : "var(--color-bg)";
+
+  const dotInner = trackingDenied && !isTracking
+    ? "white"
+    : isTracking
+    ? "white"
+    : "var(--color-text-muted)";
+
+  const label = isTracking ? "Recording" : trackingDenied ? "Denied" : "Track";
+  const labelColor = isTracking ? "#e53e3e" : trackingDenied ? "var(--color-orange)" : "var(--color-text-muted)";
 
   return (
     <div
@@ -34,39 +52,60 @@ export default function StatsPanel({
         background: "var(--color-surface)",
         border: "1px solid var(--color-border)",
         borderRadius: 14,
-        padding: "10px 16px",
+        // No right padding — the track button extends flush to the right edge
+        padding: "0 0 0 16px",
         boxShadow: "0 2px 12px rgba(0,0,0,0.08)",
         zIndex: 10,
         display: "flex",
-        alignItems: "center",
-        gap: 16,
+        alignItems: "stretch",
         userSelect: "none",
+        overflow: "hidden",
       }}
     >
-      <span
+      {/* Left content */}
+      <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "10px 0" }}>
+        <span
+          style={{
+            fontWeight: 600,
+            fontSize: 14,
+            color: "var(--color-text)",
+            letterSpacing: "-0.01em",
+          }}
+        >
+          Been There
+        </span>
+
+        <div style={{ width: 1, height: 20, background: "var(--color-border)" }} />
+
+        <Stat label="cells" value={cellCount.toLocaleString()} color="var(--color-teal)" isLoading={isLoading} />
+        <Stat label="photos" value={photoCount.toLocaleString()} color="var(--color-pink)" isLoading={isLoading} />
+      </div>
+
+      {/* Divider before track area */}
+      <div style={{ width: 1, background: "var(--color-border)", margin: "0 12px" }} />
+
+      {/* Track — large hit area from divider to panel right edge */}
+      <button
+        onClick={onToggleTracking}
+        title={isTracking ? "Stop tracking" : trackingDenied ? "Location denied" : "Track my location"}
         style={{
-          fontWeight: 600,
-          fontSize: 14,
-          color: "var(--color-text)",
-          letterSpacing: "-0.01em",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 4,
+          // Right padding fills to panel edge; left gives breathing room from divider
+          paddingLeft: 4,
+          paddingRight: 16,
+          border: "none",
+          background: "transparent",
+          cursor: "pointer",
+          touchAction: "manipulation",
+          WebkitTapHighlightColor: "transparent",
+          // Slight tint on hover/active handled via opacity change on inner content
         }}
       >
-        Been There
-      </span>
-
-      <div style={{ width: 1, height: 20, background: "var(--color-border)" }} />
-
-      <Stat label="cells" value={cellCount.toLocaleString()} color="var(--color-teal)" isLoading={isLoading} />
-      <Stat label="photos" value={photoCount.toLocaleString()} color="var(--color-pink)" isLoading={isLoading} />
-
-      <div style={{ width: 1, height: 20, background: "var(--color-border)" }} />
-
-      {/* Track location */}
-      <div
-        style={{
-          display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
-        }}
-      >
+        {/* Ring + dot */}
         <div style={{ position: "relative", width: SIZE, height: SIZE }}>
           {isTracking && (
             <svg
@@ -81,35 +120,32 @@ export default function StatsPanel({
                 strokeLinecap="round" />
             </svg>
           )}
-          <button
-            onClick={onToggleTracking}
-            title={isTracking ? "Stop tracking" : "Track my location"}
-            style={{
-              position: "absolute", top: "50%", left: "50%",
-              transform: "translate(-50%, -50%)",
-              width: 24, height: 24, borderRadius: "50%", border: "none",
-              background: isTracking ? "#e53e3e" : "var(--color-bg)",
-              cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              animation: isTracking ? "loc-pulse 2.2s ease-in-out infinite" : "none",
-              boxShadow: isTracking ? "0 0 0 0 rgba(229,62,62,0.55)" : "inset 0 0 0 1px var(--color-border)",
-              transition: "background 0.2s",
-            }}
-          >
+          <div style={{
+            position: "absolute", top: "50%", left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: 24, height: 24, borderRadius: "50%",
+            background: dotBg,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            animation: isTracking ? "loc-pulse 2.2s ease-in-out infinite" : "none",
+            boxShadow: (isTracking || trackingDenied) ? "0 0 0 0 rgba(229,62,62,0.55)" : "inset 0 0 0 1px var(--color-border)",
+            transition: "background 0.2s",
+            pointerEvents: "none",
+          }}>
             <div style={{
               width: 8, height: 8, borderRadius: "50%",
-              background: isTracking ? "white" : "var(--color-text-muted)",
+              background: dotInner,
             }} />
-          </button>
+          </div>
         </div>
+
         <span style={{
           fontSize: 9, fontWeight: 500, letterSpacing: "0.02em", lineHeight: 1,
-          color: isTracking ? "#e53e3e" : "var(--color-text-muted)",
+          color: labelColor,
           transition: "color 0.2s",
         }}>
-          {isTracking ? "Recording" : "Track"}
+          {label}
         </span>
-      </div>
+      </button>
     </div>
   );
 }

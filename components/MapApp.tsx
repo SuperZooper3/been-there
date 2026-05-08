@@ -48,6 +48,9 @@ export default function MapApp() {
   const [trackingProgress, setTrackingProgress] = useState(0); // 0–100
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [trackingDenied, setTrackingDenied] = useState(false);
+  // Manual draw mode — hidden by default, revealed when location is denied
+  const [drawUnlocked, setDrawUnlocked] = useState(false);
+  const [showDrawModal, setShowDrawModal] = useState(false);
   const trackingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const trackingElapsedRef = useRef(0);
   // Previous ping location — used to interpolate cells along the path between pings
@@ -330,6 +333,16 @@ export default function MapApp() {
     );
   }
 
+  function handleTrackToggle() {
+    if (isTracking) {
+      stopTracking();
+    } else if (trackingDenied) {
+      setShowDrawModal(true);
+    } else {
+      startTracking();
+    }
+  }
+
   function stopTracking() {
     setIsTracking(false);
     setCurrentLocation(null);
@@ -428,8 +441,9 @@ export default function MapApp() {
         onUpload={() => setGeoUploadOpen(true)}
         isTracking={isTracking}
         trackingProgress={trackingProgress}
-        onToggleTracking={isTracking ? stopTracking : startTracking}
+        onToggleTracking={handleTrackToggle}
         isLoading={isLoading}
+        trackingDenied={trackingDenied}
       />
 
       <DrawControls
@@ -439,6 +453,7 @@ export default function MapApp() {
         onUndo={handleUndo}
         onRedo={handleRedo}
         onUploadPhoto={() => setGeoUploadOpen(true)}
+        drawUnlocked={drawUnlocked}
       />
 
       {selectedPhoto && (
@@ -467,9 +482,9 @@ export default function MapApp() {
         />
       )}
 
-      {trackingDenied && (
+      {showDrawModal && (
         <div
-          onClick={() => setTrackingDenied(false)}
+          onClick={() => setShowDrawModal(false)}
           style={{
             position: "fixed", inset: 0,
             background: "rgba(0,0,0,0.4)",
@@ -480,31 +495,63 @@ export default function MapApp() {
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: "white", borderRadius: 12, padding: "24px 28px",
-              maxWidth: 310, width: "90%",
-              boxShadow: "0 8px 40px rgba(0,0,0,0.25)", textAlign: "center",
+              background: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+              borderRadius: 20,
+              padding: "28px 28px 24px",
+              maxWidth: 320,
+              width: "90%",
+              boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
+              textAlign: "center",
             }}
           >
-            <div style={{ fontSize: 32, marginBottom: 10 }}>📍</div>
-            <p style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 600, color: "#1a1a1a" }}>
-              Location access denied
+            <div style={{ fontSize: 32, marginBottom: 12 }}>📍</div>
+            <p style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 700, color: "var(--color-text)" }}>
+              Location Access Denied
             </p>
-            <p style={{ margin: "0 0 20px", fontSize: 13, color: "#666", lineHeight: 1.5 }}>
-              Been There couldn&apos;t access your location. You can paint visited areas manually using the draw tool instead.
+            <p style={{ margin: "0 0 24px", fontSize: 13, color: "var(--color-text-muted)", lineHeight: 1.6 }}>
+              Been There couldn&apos;t access your location. You can try again, or paint
+              visited areas manually using the draw tool.
             </p>
-            <button
-              onClick={() => setTrackingDenied(false)}
-              style={{
-                width: "100%", padding: "10px 0", borderRadius: 8,
-                border: "none", background: "var(--color-orange)",
-                color: "var(--color-text)", fontWeight: 600, fontSize: 14, cursor: "pointer",
-              }}
-            >
-              Got it
-            </button>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => { setShowDrawModal(false); startTracking(); }}
+                style={{
+                  flex: 1,
+                  padding: "10px 0",
+                  borderRadius: 12,
+                  border: "1px solid var(--color-border)",
+                  background: "transparent",
+                  color: "var(--color-text-muted)",
+                  fontSize: 14,
+                  cursor: "pointer",
+                  touchAction: "manipulation",
+                }}
+              >
+                Try Again
+              </button>
+              <button
+                onClick={() => { setShowDrawModal(false); setTrackingDenied(false); setDrawUnlocked(true); }}
+                style={{
+                  flex: 2,
+                  padding: "10px 0",
+                  borderRadius: 12,
+                  border: "none",
+                  background: "var(--color-orange)",
+                  color: "var(--color-text)",
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  touchAction: "manipulation",
+                }}
+              >
+                Draw Manually
+              </button>
+            </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

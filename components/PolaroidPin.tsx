@@ -11,6 +11,8 @@ interface Props {
 
 export default function PolaroidPin({ photo, onClose, onDelete }: Props) {
   const [confirming, setConfirming] = useState(false);
+  // Stable rotation: computed once on mount so re-renders don't spin the card
+  const [rotation] = useState(() => parseFloat((Math.random() * 4 - 2).toFixed(1)));
 
   return (
     <>
@@ -35,7 +37,7 @@ export default function PolaroidPin({ photo, onClose, onDelete }: Props) {
             boxShadow: "0 8px 40px rgba(0,0,0,0.25)",
             maxWidth: 320,
             width: "90%",
-            transform: `rotate(${(Math.random() * 4 - 2).toFixed(1)}deg)`,
+            transform: `rotate(${rotation}deg)`,
           }}
         >
           <img

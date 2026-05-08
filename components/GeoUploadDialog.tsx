@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import exifr from "exifr";
 
 type Stage =
@@ -23,13 +23,21 @@ export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: P
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Auto-open file picker when the dialog first mounts
+  useEffect(() => {
+    const timer = setTimeout(() => inputRef.current?.click(), 80);
+    return () => clearTimeout(timer);
+  }, []);
+
   async function processFile(file: File) {
     setStage({ type: "loading" });
     const preview = URL.createObjectURL(file);
     try {
       const gps = await exifr.gps(file);
-      if (gps?.latitude != null && gps?.longitude != null) {
-        setStage({ type: "geolocated", file, preview, lat: gps.latitude, lng: gps.longitude });
+      const lat = gps?.latitude;
+      const lng = gps?.longitude;
+      if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
+        setStage({ type: "geolocated", file, preview, lat, lng });
       } else {
         setStage({ type: "no-gps", file, preview });
       }

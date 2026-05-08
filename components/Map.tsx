@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useMemo } from "react";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, MapMouseEvent, MapTouchEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import Supercluster from "supercluster";
-import { getCellBoundary, getParentCell, snapToCell, DRAW_RESOLUTION } from "@/lib/h3";
+import { getCellBoundary, getParentCell, snapToCell, resolutionForZoom, DRAW_RESOLUTION } from "@/lib/h3";
 import type { MapMode } from "./MapApp";
 
 const STADIA_STYLE =
@@ -60,6 +60,8 @@ export default function Map({
   const mapRef = useRef<maplibregl.Map | null>(null);
   // Use a plain object to avoid collision with maplibre-gl's exported `Map` class name
   const markersRef = useRef<Record<string, maplibregl.Marker>>({});
+  // Track last render-resolution so we only notify the parent when it actually changes
+  const lastRenderResRef = useRef<number>(resolutionForZoom(13));
   const isPaintingRef = useRef(false);
   // K key held → next map click fires a debug location ping instead of the normal action
   const isKPressedRef = useRef(false);
@@ -75,66 +77,59 @@ export default function Map({
   // Indirection so map event listeners always call the latest renderMarkers impl
   const renderMarkersRef = useRef<() => void>(() => {});
 
-  // Build GeoJSON from visited cells, aggregating to the current render resolution.
-  // All cells are stored at res-9; when zoomed out we derive unique parent cells so
-  // any visited child causes its parent hex to light up.
-  const buildGeoJSON = useCallback(
-    (cells: Set<string>): GeoJSON.FeatureCollection => {
-      const displayCells =
-        renderResolution < DRAW_RESOLUTION
-          ? [...new Set([...cells].map((h) => getParentCell(h, renderResolution)))]
-          : [...cells];
+  // Derive the cells to display at the current render resolution.
+  // All cells are stored at res-9; when zoomed out we group them by parent so any
+  // visited child causes its parent hex to light up. Memoised so both GeoJSON
+  // builders share the same array and skip recomputing when nothing changed.
+  const displayCells = useMemo(() => {
+    if (renderResolution < DRAW_RESOLUTION) {
+      return [...new Set([...visitedCells].map((h) => getParentCell(h, renderResolution)))];
+    }
+    return [...visitedCells];
+  }, [visitedCells, renderResolution]);
 
-      return {
-        type: "FeatureCollection",
-        features: displayCells.map((h3Index) => {
-          const boundary = getCellBoundary(h3Index);
-          return {
-            type: "Feature",
-            geometry: {
-              type: "Polygon",
-              coordinates: [[...boundary, boundary[0]]],
-            },
-            properties: { h3Index },
-          };
-        }),
-      };
-    },
-    [renderResolution]
-  );
-
-  // Build desaturation mask: world polygon with holes for visited cells
-  const buildDesaturationMask = useCallback(
-    (cells: Set<string>): GeoJSON.Feature => {
-      const displayCells =
-        renderResolution < DRAW_RESOLUTION
-          ? [...new Set([...cells].map((h) => getParentCell(h, renderResolution)))]
-          : [...cells];
-
-      const worldBounds = [
-        [-180, -85],
-        [180, -85],
-        [180, 85],
-        [-180, 85],
-        [-180, -85],
-      ];
-
-      const holes = displayCells.map((h3Index) => {
+  // Build GeoJSON fill layer from the display cells
+  const buildGeoJSON = useCallback((): GeoJSON.FeatureCollection => {
+    return {
+      type: "FeatureCollection",
+      features: displayCells.map((h3Index) => {
         const boundary = getCellBoundary(h3Index);
-        return [...boundary, boundary[0]];
-      });
+        return {
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [[...boundary, boundary[0]]],
+          },
+          properties: { h3Index },
+        };
+      }),
+    };
+  }, [displayCells]);
 
-      return {
-        type: "Feature",
-        geometry: {
-          type: "Polygon",
-          coordinates: [worldBounds, ...holes],
-        },
-        properties: {},
-      };
-    },
-    [renderResolution]
-  );
+  // Build desaturation mask: world polygon with holes cut out for visited cells
+  const buildDesaturationMask = useCallback((): GeoJSON.Feature => {
+    const worldBounds = [
+      [-180, -85],
+      [180, -85],
+      [180, 85],
+      [-180, 85],
+      [-180, -85],
+    ];
+
+    const holes = displayCells.map((h3Index) => {
+      const boundary = getCellBoundary(h3Index);
+      return [...boundary, boundary[0]];
+    });
+
+    return {
+      type: "Feature",
+      geometry: {
+        type: "Polygon",
+        coordinates: [worldBounds, ...holes],
+      },
+      properties: {},
+    };
+  }, [displayCells]);
 
   // Initialise map
   useEffect(() => {
@@ -147,8 +142,21 @@ export default function Map({
       zoom: 13,
     });
 
+    // Fire onZoomChange any time the H3 render resolution would change mid-gesture
+    // (not just zoomend) so cells regroup immediately while pinch-zooming on mobile.
+    map.on("zoom", () => {
+      const z = map.getZoom();
+      const newRes = resolutionForZoom(z);
+      if (newRes !== lastRenderResRef.current) {
+        lastRenderResRef.current = newRes;
+        onZoomChange(z);
+      }
+    });
+
     map.on("zoomend", () => {
-      onZoomChange(map.getZoom());
+      const z = map.getZoom();
+      lastRenderResRef.current = resolutionForZoom(z);
+      onZoomChange(z);
       renderMarkersRef.current();
     });
 
@@ -163,7 +171,7 @@ export default function Map({
       // Add desaturation mask source
       map.addSource(DESAT_SOURCE, {
         type: "geojson",
-        data: buildDesaturationMask(new Set()),
+        data: buildDesaturationMask(),
       });
 
       // Add desaturation layer
@@ -179,7 +187,7 @@ export default function Map({
 
       map.addSource(CELL_SOURCE, {
         type: "geojson",
-        data: buildGeoJSON(new Set()),
+        data: buildGeoJSON(),
       });
 
       map.addLayer({
@@ -225,7 +233,8 @@ export default function Map({
     }
   }, [centerOn]);
 
-  // Update cell GeoJSON and desaturation mask when visitedCells changes.
+  // Update cell GeoJSON and desaturation mask when displayCells changes
+  // (driven by either visitedCells or renderResolution changes).
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -233,9 +242,8 @@ export default function Map({
     const update = () => {
       const cellSource = map.getSource(CELL_SOURCE) as GeoJSONSource | undefined;
       const desatSource = map.getSource(DESAT_SOURCE) as GeoJSONSource | undefined;
-      
-      cellSource?.setData(buildGeoJSON(visitedCells));
-      desatSource?.setData(buildDesaturationMask(visitedCells));
+      cellSource?.setData(buildGeoJSON());
+      desatSource?.setData(buildDesaturationMask());
     };
 
     if (map.isStyleLoaded()) {
@@ -244,7 +252,7 @@ export default function Map({
       map.once("load", update);
       return () => { map.off("load", update); };
     }
-  }, [visitedCells, buildGeoJSON, buildDesaturationMask]);
+  }, [buildGeoJSON, buildDesaturationMask]);
 
   // Lock/unlock map pan and set canvas cursor based on mode.
   // We set cursor on map.getCanvas() directly because MapLibre owns that

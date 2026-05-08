@@ -136,7 +136,6 @@ export default function PinDropDialog({ lat, lng, initialFile, onConfirm, onCanc
           ref={inputRef}
           type="file"
           accept="image/*"
-          capture="environment"
           style={{ display: "none" }}
           onChange={handleFile}
         />
