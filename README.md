@@ -1,8 +1,22 @@
-# Been There
+![Been There](/public/been-there-long.png)
 
 Fill out the map by visiting places.
 
 Been There is a map-based memory app where you color in real-world areas you've explored and drop photo pins to remember places. As you visit streets, neighborhoods, cities, and regions, explored areas light up — turning the world into a personal exploration record.
+
+---
+
+## Features
+
+- **Draw mode** — paint H3 hexagon cells you've visited directly on the map; pan locks so painting stays precise
+- **Erase mode** — remove cells you painted by mistake
+- **Undo / Redo** — step backward and forward through your current session's draw strokes (`⌘Z` / `⌘⇧Z`)
+- **Foreground GPS tracking** — tap Track to auto-fill cells as you move; a progress ring shows the current cell fill; location denial unlocks manual draw instead
+- **Photo pins** — drop polaroid-style photo memories anywhere on the map with an optional caption
+- **EXIF-aware uploads** — photos with GPS metadata place themselves automatically; others can be placed manually
+- **Photo clusters** — nearby pins cluster at low zoom and expand as you zoom in
+- **Live stats** — cell count and photo count always visible in the top bar
+- **PWA** — installable on iOS and Android with full offline support, home-screen icon, and splash screen
 
 ---
 
@@ -18,11 +32,11 @@ npm install
 
 ### 2. Set up external services
 
-Before running the app you need to create accounts and configure three services. Full step-by-step instructions are in [`docs/manual-setup.md`](docs/manual-setup.md). Summary:
+Full step-by-step instructions are in [`docs/manual-setup.md`](docs/manual-setup.md). Summary:
 
 | Service | What it provides | Time |
 |---|---|---|
-| [Supabase](https://supabase.com) | Database, email magic link auth, and photo storage | ~10 min |
+| [Supabase](https://supabase.com) | Database, email auth, and photo storage | ~10 min |
 | [Stadia Maps](https://stadiamaps.com) | Map tiles — add your domain in their dashboard for production | ~2 min |
 | [Vercel](https://vercel.com) | Hosting and deployment | ~5 min |
 
@@ -32,14 +46,15 @@ Before running the app you need to create accounts and configure three services.
 cp .env.local.example .env.local
 ```
 
-Then fill in `.env.local` with your Supabase values:
+Fill in `.env.local`:
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+NEXT_PUBLIC_SITE_URL=https://your-domain.com
 ```
 
-No Stadia API key needed — Stadia authenticates browser apps by domain, which works automatically on localhost and in production.
+`NEXT_PUBLIC_SITE_URL` is used to generate absolute Open Graph URLs for link previews. Stadia Maps authenticates browser apps by domain — no API key required; it works automatically on localhost and in production.
 
 ### 4. Run the database migration
 
@@ -51,19 +66,21 @@ In the Supabase dashboard, go to **SQL Editor**, paste the contents of [`supabas
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Enter your email address, click the link in your inbox, and you're in.
+Open [http://localhost:3000](http://localhost:3000). Create an account with your email and a password — you'll be taken straight to the map.
 
 ---
 
 ## How to use the app
 
-See [`docs/phase1-usage.md`](docs/phase1-usage.md) for a full guide. Short version:
+| Mode | How to activate | What it does |
+|---|---|---|
+| Browse | Tap **Browse** or press `H` | Pan and zoom freely; tap pins to open them |
+| Draw | Tap **Draw** or press `P` | Drag to paint H3 cells you've visited; pan is locked |
+| Erase | Tap **Erase** or press `E` | Drag to remove cells |
+| Pin | Tap the camera button or press `U` | Drop a photo memory; EXIF GPS auto-places it |
+| Track | Tap the **Track** button | Fills cells as you move in real time |
 
-- **Browse mode** — pan and zoom freely, tap pins to open them
-- **Draw mode** — drag to paint H3 hex cells you've visited (map pan locks so painting is precise)
-- **Erase mode** — drag to remove mistakenly painted cells
-- **Pin mode** — tap the map to drop a photo memory with optional caption
-- **Undo/Redo** — `↩` / `↪` buttons (or `⌘Z` / `⌘⇧Z`) revert draw/erase strokes within the current session
+Undo / redo work in draw and erase modes with `⌘Z` / `⌘⇧Z` (or `Ctrl+Z` / `Ctrl+Shift+Z` on Windows).
 
 ---
 
@@ -71,8 +88,8 @@ See [`docs/phase1-usage.md`](docs/phase1-usage.md) for a full guide. Short versi
 
 1. Push the repo to GitHub.
 2. Import the project at [vercel.com](https://vercel.com).
-3. Add the three environment variables from `.env.local` in the Vercel project settings.
-4. Add your Vercel deployment URL to Supabase under **Authentication > URL Configuration > Redirect URLs**.
+3. Add the environment variables from `.env.local` in the Vercel project settings.
+4. Add your Vercel deployment URL to Supabase under **Authentication › URL Configuration › Redirect URLs**.
 5. Deploy.
 
 Full details in [`docs/manual-setup.md`](docs/manual-setup.md).
@@ -83,14 +100,41 @@ Full details in [`docs/manual-setup.md`](docs/manual-setup.md).
 
 | Layer | Choice |
 |---|---|
-| Framework | Next.js App Router on Vercel |
+| Framework | Next.js 15 App Router, deployed on Vercel |
 | Map rendering | MapLibre GL JS |
-| Map tiles | Stadia Maps (OSM-based) |
+| Map tiles | Stadia Maps (OSM-based, domain-authenticated) |
 | Spatial model | H3 hexagons (`h3-js`), stored at resolution 9 |
 | Database | Supabase Postgres |
-| Auth | Supabase Auth (email magic link) |
+| Auth | Supabase Auth (email + password) |
 | Photo storage | Supabase Storage |
-| PWA | `next-pwa` + `public/manifest.json` |
+| Photo clustering | Supercluster |
+| EXIF parsing | exifr |
+| Icons | Lucide React |
+| Styling | Tailwind CSS v4 |
+| PWA | `next-pwa` + Web App Manifest |
+
+---
+
+## Data model
+
+```
+visit_cells
+  user_id          uuid  → auth.users
+  h3_index         text  (H3 resolution 9)
+  first_visited_at timestamptz
+  last_visited_at  timestamptz
+  unique (user_id, h3_index)
+
+place_photos
+  user_id     uuid  → auth.users
+  h3_index    text  (snapped H3 cell)
+  lat, lng    float
+  storage_key text
+  caption     text
+  created_at  timestamptz
+```
+
+Only resolution-9 cells are stored. Coarser cells for zoomed-out views are derived at render time.
 
 ---
 
@@ -103,4 +147,4 @@ Full details in [`docs/manual-setup.md`](docs/manual-setup.md).
 | [`docs/stack.md`](docs/stack.md) | Stack choices, Supabase decision, Capacitor notes |
 | [`docs/maps.md`](docs/maps.md) | Basemap options and Stadia decision |
 | [`docs/manual-setup.md`](docs/manual-setup.md) | Step-by-step external service setup |
-| [`docs/phase1-usage.md`](docs/phase1-usage.md) | How to use the app |
+| [`docs/phase1-usage.md`](docs/phase1-usage.md) | Detailed usage guide |
