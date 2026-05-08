@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 const SIZE = 34;
 const R = 14;
 const CIRC = 2 * Math.PI * R;
@@ -64,16 +66,14 @@ export default function StatsPanel({
     >
       {/* Left content */}
       <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "10px 0" }}>
-        <span
-          style={{
-            fontWeight: 600,
-            fontSize: 14,
-            color: "var(--color-text)",
-            letterSpacing: "-0.01em",
-          }}
-        >
-          Been There
-        </span>
+        <Image
+          src="/been-there-long.png"
+          alt="Been There"
+          width={400}
+          height={96}
+          style={{ width: "auto", height: 28 }}
+          priority
+        />
 
         <div style={{ width: 1, height: 20, background: "var(--color-border)" }} />
 

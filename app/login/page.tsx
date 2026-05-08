@@ -94,9 +94,14 @@ function LoginForm() {
         className="w-full max-w-sm rounded-2xl p-8 shadow-md"
         style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
       >
-        <h1 className="text-2xl font-semibold mb-1" style={{ color: "var(--color-text)" }}>
-          Been There
-        </h1>
+        <div className="mb-6">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/been-there-long.png"
+            alt="Been There"
+            style={{ width: "100%", height: "auto", display: "block" }}
+          />
+        </div>
         <p className="text-sm mb-8" style={{ color: "var(--color-text-muted)" }}>
           {view === "update" ? "Choose a new password." : "Fill out the map by visiting places."}
         </p>
