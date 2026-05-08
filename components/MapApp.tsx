@@ -428,7 +428,6 @@ export default function MapApp() {
         onCellErase={handleCellErase}
         onPinDrop={handlePinDrop}
         onPinClick={setSelectedPhoto}
-        renderResolution={renderResolution}
         onZoomChange={setZoom}
         centerOn={initialCenter}
         currentLocation={currentLocation}
