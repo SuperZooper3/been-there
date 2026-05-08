@@ -55,7 +55,7 @@ export default function StatsPanel({
         border: "1px solid var(--color-border)",
         borderRadius: 14,
         // No right padding — the track button extends flush to the right edge
-        padding: "0 0 0 16px",
+        padding: "0 0 0 12px",
         boxShadow: "0 2px 12px rgba(0,0,0,0.08)",
         zIndex: 10,
         display: "flex",
@@ -65,24 +65,24 @@ export default function StatsPanel({
       }}
     >
       {/* Left content */}
-      <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "10px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0" }}>
         <Image
           src="/been-there-long.png"
           alt="Been There"
           width={400}
           height={96}
-          style={{ width: "auto", height: 28 }}
+          style={{ width: "auto", height: 39 }}
           priority
         />
 
-        <div style={{ width: 1, height: 20, background: "var(--color-border)" }} />
+        <div style={{ width: 1, height: 24, background: "var(--color-border)" }} />
 
         <Stat label="cells" value={cellCount.toLocaleString()} color="var(--color-teal)" isLoading={isLoading} />
         <Stat label="photos" value={photoCount.toLocaleString()} color="var(--color-pink)" isLoading={isLoading} />
       </div>
 
       {/* Divider before track area */}
-      <div style={{ width: 1, background: "var(--color-border)", margin: "0 12px" }} />
+      <div style={{ width: 1, background: "var(--color-border)", margin: "0 10px" }} />
 
       {/* Track — large hit area from divider to panel right edge */}
       <button
