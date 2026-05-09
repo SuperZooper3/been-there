@@ -23,6 +23,8 @@ interface Props {
   onPinClick: (photo: PhotoPin) => void;
   onZoomChange: (zoom: number) => void;
   centerOn?: { lat: number; lng: number } | null;
+  /** Increment `seq` to ease the map to this point at the default street zoom (13). */
+  recenterTrackerAt?: { lat: number; lng: number; seq: number } | null;
   currentLocation?: { lat: number; lng: number } | null;
   /** Debug: K+click on the map fires this with the clicked lat/lng as a fake location ping. */
   onDebugLocation?: (lat: number, lng: number) => void;
@@ -96,6 +98,7 @@ export default function Map({
   onPinClick,
   onZoomChange,
   centerOn,
+  recenterTrackerAt,
   currentLocation,
   onDebugLocation,
 }: Props) {
@@ -244,6 +247,20 @@ export default function Map({
       map.once("load", () => map.jumpTo({ center: [centerOn.lng, centerOn.lat] }));
     }
   }, [centerOn]);
+
+  // When tracking starts, parent bumps `seq` on the first GPS fix so the user sees their pin.
+  useEffect(() => {
+    if (!recenterTrackerAt) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const { lat, lng } = recenterTrackerAt;
+    const defaultZoom = 13;
+    const run = () => {
+      map.easeTo({ center: [lng, lat], zoom: defaultZoom, duration: 500 });
+    };
+    if (map.isStyleLoaded()) run();
+    else map.once("load", run);
+  }, [recenterTrackerAt?.seq]);
 
   // Lock/unlock map pan and set canvas cursor based on mode
   useEffect(() => {

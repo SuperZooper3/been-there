@@ -83,6 +83,9 @@ export default function MapApp() {
   const trackingElapsedRef = useRef(0);
   // Previous ping location — used to interpolate cells along the path between pings
   const prevLocationRef = useRef<{ lat: number; lng: number } | null>(null);
+  /** Set true when tracking starts; first `applyLocation` consumes it to recenter the map on the tracker pin */
+  const shouldRecenterMapOnTrackerFixRef = useRef(false);
+  const [trackerRecenterAt, setTrackerRecenterAt] = useState<{ lat: number; lng: number; seq: number } | null>(null);
   // Native background geolocation watcher ID — kept in ref so stopTracking can remove it
   const nativeWatcherIdRef = useRef<string | null>(null);
   // Stable ref to applyLocation — updated every render so the native plugin callback
@@ -445,6 +448,14 @@ export default function MapApp() {
   }
 
   function applyLocation(lat: number, lng: number) {
+    if (shouldRecenterMapOnTrackerFixRef.current) {
+      shouldRecenterMapOnTrackerFixRef.current = false;
+      setTrackerRecenterAt((prev) => ({
+        lat,
+        lng,
+        seq: (prev?.seq ?? 0) + 1,
+      }));
+    }
     setCurrentLocation({ lat, lng });
     const newCell = snapToCell(lat, lng);
 
@@ -495,6 +506,7 @@ export default function MapApp() {
           }
         );
         nativeWatcherIdRef.current = watcherId;
+        shouldRecenterMapOnTrackerFixRef.current = true;
         setIsTracking(true);
         setTrackingDenied(false);
         setLastNativeGpsAtMs(null);
@@ -506,11 +518,13 @@ export default function MapApp() {
           setTrackingBackgroundLimited(true);
         }
       } catch {
+        shouldRecenterMapOnTrackerFixRef.current = false;
         setTrackingDenied(true);
       }
     } else {
       // Web path — unchanged
       if (!navigator.geolocation) { setTrackingDenied(true); return; }
+      shouldRecenterMapOnTrackerFixRef.current = true;
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           applyLocation(pos.coords.latitude, pos.coords.longitude);
@@ -519,7 +533,10 @@ export default function MapApp() {
           trackingElapsedRef.current = 0;
           setTrackingProgress(0);
         },
-        () => setTrackingDenied(true),
+        () => {
+          shouldRecenterMapOnTrackerFixRef.current = false;
+          setTrackingDenied(true);
+        },
         { enableHighAccuracy: true, timeout: 10_000 }
       );
     }
@@ -547,6 +564,7 @@ export default function MapApp() {
       setTrackingBackgroundLimited(false);
     }
     setIsTracking(false);
+    shouldRecenterMapOnTrackerFixRef.current = false;
     setCurrentLocation(null);
     setTrackingProgress(0);
     setLastNativeGpsAtMs(null);
@@ -638,6 +656,7 @@ export default function MapApp() {
         onPinClick={setSelectedPhoto}
         onZoomChange={setZoom}
         centerOn={initialCenter}
+        recenterTrackerAt={trackerRecenterAt}
         currentLocation={currentLocation}
         onDebugLocation={applyLocation}
       />
