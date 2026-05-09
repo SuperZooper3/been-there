@@ -8,12 +8,17 @@ const isProduction = process.env.CAPACITOR_ENV === 'production';
 const config: CapacitorConfig = {
   appId: 'com.beenthere.app',
   appName: 'Been There',
+  // Required so background location + WebView bridge keep working after ~5 min backgrounded.
+  // See https://github.com/capacitor-community/background-geolocation#android
+  android: {
+    useLegacyBridge: true,
+  },
   // out/ is a placeholder dir required by Capacitor CLI.
   // In A2 mode (server.url set) the native app loads from Vercel, not this dir.
   webDir: 'out',
   server: {
     url: isProduction
-      ? 'https://been-there.vercel.app'
+      ? 'https://been-there-maps.vercel.app'
       : (process.env.CAPACITOR_DEV_URL ?? 'http://YOUR_LAN_IP:3000'),
     cleartext: !isProduction, // allow HTTP for local dev (Android); iOS needs NSAllowsLocalNetworking in Info.plist
   },

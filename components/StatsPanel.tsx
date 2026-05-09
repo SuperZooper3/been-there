@@ -16,6 +16,8 @@ interface Props {
   onToggleTracking: () => void;
   isLoading?: boolean;
   trackingDenied?: boolean;
+  /** Android native: show last GPS fix time under stats while tracking */
+  nativeLastGpsAtMs?: number | null;
 }
 
 export default function StatsPanel({
@@ -27,6 +29,7 @@ export default function StatsPanel({
   onToggleTracking,
   isLoading = false,
   trackingDenied = false,
+  nativeLastGpsAtMs = null,
 }: Props) {
   const dashOffset = CIRC * (1 - trackingProgress / 100);
 
@@ -62,6 +65,7 @@ export default function StatsPanel({
         alignItems: "stretch",
         userSelect: "none",
         overflow: "hidden",
+        ...(isTracking && nativeLastGpsAtMs != null ? { paddingBottom: 18 } : {}),
       }}
     >
       {/* Left content */}
@@ -80,6 +84,25 @@ export default function StatsPanel({
         <Stat label="cells" value={cellCount.toLocaleString()} color="var(--color-teal)" isLoading={isLoading} />
         <Stat label="photos" value={photoCount.toLocaleString()} color="var(--color-pink)" isLoading={isLoading} />
       </div>
+
+      {isTracking && nativeLastGpsAtMs != null && (
+        <div
+          style={{
+            position: "absolute",
+            left: 12,
+            right: 120,
+            bottom: 4,
+            fontSize: 10,
+            color: "var(--color-text-muted)",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            pointerEvents: "none",
+          }}
+        >
+          Last GPS: {new Date(nativeLastGpsAtMs).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" })}
+        </div>
+      )}
 
       {/* Divider before track area */}
       <div style={{ width: 1, background: "var(--color-border)", margin: "0 10px" }} />

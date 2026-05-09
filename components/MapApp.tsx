@@ -19,6 +19,7 @@ import {
 import Map, { type PhotoPin } from "./Map";
 import DrawControls from "./DrawControls";
 import StatsPanel from "./StatsPanel";
+import NativeOnboardingModal, { hasCompletedNativeOnboarding } from "./NativeOnboardingModal";
 import PolaroidPin from "./PolaroidPin";
 import PinDropDialog from "./PinDropDialog";
 import GeoUploadDialog from "./GeoUploadDialog";
@@ -67,6 +68,9 @@ export default function MapApp() {
   // Manual draw mode — hidden by default, revealed when location is denied
   const [drawUnlocked, setDrawUnlocked] = useState(false);
   const [showDrawModal, setShowDrawModal] = useState(false);
+  const [showNativeOnboarding, setShowNativeOnboarding] = useState(false);
+  /** Android: last GPS sample time from native plugin (ms), mirrors notification “Last GPS fix” */
+  const [lastNativeGpsAtMs, setLastNativeGpsAtMs] = useState<number | null>(null);
   const trackingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const trackingElapsedRef = useRef(0);
   // Previous ping location — used to interpolate cells along the path between pings
@@ -119,6 +123,13 @@ export default function MapApp() {
       }
     }
     load();
+  }, []);
+
+  // First launch on native shell: explain notifications + battery before they hit Track.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    if (hasCompletedNativeOnboarding()) return;
+    setShowNativeOnboarding(true);
   }, []);
 
   // isSyncing prevents the reconnect flush and the 500ms batch from racing (M2)
@@ -403,6 +414,18 @@ export default function MapApp() {
   async function startTracking() {
     if (Capacitor.isNativePlatform()) {
       try {
+        if (Capacitor.getPlatform() === "android") {
+          try {
+            const { LocalNotifications } = await import("@capacitor/local-notifications");
+            const perm = await LocalNotifications.checkPermissions();
+            if (perm.display !== "granted") {
+              await LocalNotifications.requestPermissions();
+            }
+          } catch {
+            /* Older WebView / missing plugin — still try tracking */
+          }
+        }
+
         const watcherId = await BackgroundGeolocation.addWatcher(
           {
             backgroundMessage: "Recording your path",
@@ -415,11 +438,15 @@ export default function MapApp() {
             if (error || !location) return;
             // Route through ref so we always call the latest applyLocation (M3)
             applyLocationRef.current(location.latitude, location.longitude);
+            if (Capacitor.getPlatform() === "android" && typeof location.time === "number") {
+              setLastNativeGpsAtMs(location.time);
+            }
           }
         );
         nativeWatcherIdRef.current = watcherId;
         setIsTracking(true);
         setTrackingDenied(false);
+        setLastNativeGpsAtMs(null);
 
         // On iOS, the first OS prompt always grants "When In Use", not "Always".
         // Background tracking silently stops when the screen is locked until the user
@@ -470,6 +497,7 @@ export default function MapApp() {
     setIsTracking(false);
     setCurrentLocation(null);
     setTrackingProgress(0);
+    setLastNativeGpsAtMs(null);
     trackingElapsedRef.current = 0;
     prevLocationRef.current = null;
     if (trackingTimerRef.current) { clearInterval(trackingTimerRef.current); trackingTimerRef.current = null; }
@@ -525,6 +553,10 @@ export default function MapApp() {
 
   return (
     <div style={{ position: "relative", width: "100vw", height: "100dvh", overflow: "hidden" }}>
+      {showNativeOnboarding && (
+        <NativeOnboardingModal onClose={() => setShowNativeOnboarding(false)} />
+      )}
+
       {loadError && (
         <div style={{
           position: "absolute",
@@ -568,6 +600,7 @@ export default function MapApp() {
         onToggleTracking={handleTrackToggle}
         isLoading={isLoading}
         trackingDenied={trackingDenied}
+        nativeLastGpsAtMs={Capacitor.getPlatform() === "android" ? lastNativeGpsAtMs : null}
       />
 
       {/* iOS background location permission warning — shown when only "When In Use" was granted.

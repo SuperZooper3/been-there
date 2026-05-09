@@ -4,4 +4,8 @@
     <string name="title_activity_main">Been There</string>
     <string name="package_name">com.beenthere.app</string>
     <string name="custom_url_scheme">com.beenthere.app</string>
+
+    <!-- @capacitor-community/background-geolocation: notification channel + monochrome small icon -->
+    <string name="capacitor_background_geolocation_notification_channel_name">Been There — location</string>
+    <string name="capacitor_background_geolocation_notification_icon">drawable/ic_stat_tracking</string>
 </resources>
