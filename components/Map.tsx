@@ -351,8 +351,12 @@ export default function Map({
         const repId = (leaves[0]?.properties as any)?.photoId as string | undefined;
         const repPhoto = repId ? photosMapRef.current[repId] : undefined;
 
+        // position:absolute;top:0;left:0 is required so all marker elements share the same
+        // (0,0) origin in the canvas container. Without it they stack in normal document flow
+        // and MapLibre's translate transform is applied on top of each element's stacked
+        // position, pushing markers progressively further off their geographic coordinates.
         const el = document.createElement("div");
-        el.style.cssText = "display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;";
+        el.style.cssText = "position:absolute;top:0;left:0;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;";
         const circle = document.createElement("div");
         circle.style.cssText = "width:52px;height:52px;border-radius:50%;overflow:hidden;border:3px solid white;box-shadow:0 2px 12px rgba(0,0,0,0.22);background:#ccc;";
         if (repPhoto) {
@@ -379,9 +383,17 @@ export default function Map({
           rotationRef.current[photo.id] = parseFloat((Math.random() * 6 - 3).toFixed(1));
         const rotation = rotationRef.current[photo.id];
 
+        // Outer element: position:absolute so MapLibre's translate starts from the container
+        // origin, not from a stacked flow position. No transform here — MapLibre owns style.transform
+        // on this element and would overwrite any rotation we set.
         const el = document.createElement("div");
-        el.className = "polaroid-marker";
-        el.style.cssText = `width:48px;background:white;padding:3px 3px 10px 3px;box-shadow:0 2px 8px rgba(0,0,0,0.18);border-radius:2px;cursor:pointer;transform:rotate(${rotation}deg);position:relative;`;
+        el.style.cssText = "position:absolute;top:0;left:0;cursor:pointer;";
+
+        // Inner element carries the visual styling and rotation. MapLibre only touches the
+        // outer element's transform, so the inner rotation is never overwritten.
+        const inner = document.createElement("div");
+        inner.className = "polaroid-marker";
+        inner.style.cssText = `width:48px;background:white;padding:3px 3px 10px 3px;box-shadow:0 2px 8px rgba(0,0,0,0.18);border-radius:2px;transform:rotate(${rotation}deg);`;
 
         const imgContainer = document.createElement("div");
         imgContainer.style.cssText = "width:100%;height:42px;position:relative;display:block;background:#f5f5f5;";
@@ -399,7 +411,8 @@ export default function Map({
         img.onload = () => { spinnerWrapper.remove(); img.style.opacity = "1"; };
         img.onerror = () => { spinnerWrapper.remove(); img.style.opacity = "1"; };
         imgContainer.appendChild(img);
-        el.appendChild(imgContainer);
+        inner.appendChild(imgContainer);
+        el.appendChild(inner);
         el.addEventListener("click", () => onPinClickRef.current(photo));
 
         markersRef.current[photo.id] = new maplibregl.Marker({ element: el, anchor: "bottom" })
@@ -421,8 +434,9 @@ export default function Map({
       return;
     }
     if (!locationMarkerRef.current) {
+      // Outer: position:absolute so MapLibre's translate starts from the container origin.
       const outer = document.createElement("div");
-      outer.style.cssText = "position:relative;width:14px;height:14px;";
+      outer.style.cssText = "position:absolute;top:0;left:0;width:14px;height:14px;";
       const ring = document.createElement("div");
       ring.className = "location-pulse-ring";
       outer.appendChild(ring);
