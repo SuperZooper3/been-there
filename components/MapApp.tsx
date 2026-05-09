@@ -601,6 +601,7 @@ export default function MapApp() {
         isLoading={isLoading}
         trackingDenied={trackingDenied}
         nativeLastGpsAtMs={Capacitor.getPlatform() === "android" ? lastNativeGpsAtMs : null}
+        onNativeTipsClick={Capacitor.isNativePlatform() ? () => setShowNativeOnboarding(true) : undefined}
       />
 
       {/* iOS background location permission warning — shown when only "When In Use" was granted.

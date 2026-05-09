@@ -85,19 +85,19 @@ index 0000000..7ed749e
 +o/bundleLibRuntimeToDirDebug
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$1.dex b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$1.dex
 new file mode 100644
-index 0000000..e69953d
+index 0000000..cfbb8a7
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$1.dex differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$2.dex b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$2.dex
 new file mode 100644
-index 0000000..0996fc4
+index 0000000..faadf86
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$2.dex differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$ServiceReceiver.dex b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$ServiceReceiver.dex
 new file mode 100644
-index 0000000..c634037
+index 0000000..328fd5a
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$ServiceReceiver.dex differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation.dex b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation.dex
 new file mode 100644
-index 0000000..1ffb4f3
+index 0000000..d9a081f
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation.dex differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$1.dex b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$1.dex
 new file mode 100644
@@ -109,7 +109,7 @@ index 0000000..7cb248f
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$LocalBinder$1.dex differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$LocalBinder.dex b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$LocalBinder.dex
 new file mode 100644
-index 0000000..422d666
+index 0000000..225c4a7
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$LocalBinder.dex differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$Watcher.dex b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/1f22adfa26cefbb9f4a2e37169c1d8c6/transformed/bundleLibRuntimeToDirDebug/bundleLibRuntimeToDirDebug_dex/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$Watcher.dex
 new file mode 100644
@@ -132,7 +132,7 @@ index 0000000..0d259dd
 +o/classes
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/35388a98984e9529542bb9955c1452e7/transformed/classes/classes_dex/classes.dex b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/35388a98984e9529542bb9955c1452e7/transformed/classes/classes_dex/classes.dex
 new file mode 100644
-index 0000000..1b78cca
+index 0000000..4a117b2
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/35388a98984e9529542bb9955c1452e7/transformed/classes/classes_dex/classes.dex differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/78d1a75bf39e805eb3b73a0c65000b66/results.bin b/node_modules/@capacitor-community/background-geolocation/android/build/.transforms/78d1a75bf39e805eb3b73a0c65000b66/results.bin
 new file mode 100644
@@ -367,7 +367,7 @@ new file mode 100644
 index 0000000..e69de29
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/compile_library_classes_jar/debug/bundleLibCompileToJarDebug/classes.jar b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/compile_library_classes_jar/debug/bundleLibCompileToJarDebug/classes.jar
 new file mode 100644
-index 0000000..98bf396
+index 0000000..b8df99c
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/compile_library_classes_jar/debug/bundleLibCompileToJarDebug/classes.jar differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/compile_library_classes_jar/release/bundleLibCompileToJarRelease/classes.jar b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/compile_library_classes_jar/release/bundleLibCompileToJarRelease/classes.jar
 new file mode 100644
@@ -1701,19 +1701,19 @@ index 0000000..b280cda
 \ No newline at end of file
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$1.class b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$1.class
 new file mode 100644
-index 0000000..b226aea
+index 0000000..5aba47b
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$1.class differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$2.class b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$2.class
 new file mode 100644
-index 0000000..e1d766f
+index 0000000..c02798a
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$2.class differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$ServiceReceiver.class b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$ServiceReceiver.class
 new file mode 100644
-index 0000000..b2ac0fa
+index 0000000..5c9ebb9
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$ServiceReceiver.class differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation.class b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation.class
 new file mode 100644
-index 0000000..932ec60
+index 0000000..6e3dd23
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation.class differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$1.class b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$1.class
 new file mode 100644
@@ -1725,7 +1725,7 @@ index 0000000..a320e29
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$LocalBinder$1.class differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$LocalBinder.class b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$LocalBinder.class
 new file mode 100644
-index 0000000..ee23868
+index 0000000..2b94751
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$LocalBinder.class differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$Watcher.class b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$Watcher.class
 new file mode 100644
@@ -4418,19 +4418,19 @@ index 0000000..08f4ebe
 \ No newline at end of file
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$1.class b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$1.class
 new file mode 100644
-index 0000000..b226aea
+index 0000000..5aba47b
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$1.class differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$2.class b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$2.class
 new file mode 100644
-index 0000000..e1d766f
+index 0000000..c02798a
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$2.class differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$ServiceReceiver.class b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$ServiceReceiver.class
 new file mode 100644
-index 0000000..b2ac0fa
+index 0000000..5c9ebb9
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation$ServiceReceiver.class differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation.class b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation.class
 new file mode 100644
-index 0000000..932ec60
+index 0000000..6e3dd23
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation.class differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$1.class b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$1.class
 new file mode 100644
@@ -4442,7 +4442,7 @@ index 0000000..a320e29
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$LocalBinder$1.class differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$LocalBinder.class b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$LocalBinder.class
 new file mode 100644
-index 0000000..ee23868
+index 0000000..2b94751
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$LocalBinder.class differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$Watcher.class b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/debug/bundleLibRuntimeToDirDebug/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService$Watcher.class
 new file mode 100644
@@ -4490,7 +4490,7 @@ index 0000000..61f74f7
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_dir/release/bundleLibRuntimeToDirRelease/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService.class differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_jar/debug/bundleLibRuntimeToJarDebug/classes.jar b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_jar/debug/bundleLibRuntimeToJarDebug/classes.jar
 new file mode 100644
-index 0000000..d380480
+index 0000000..6ce5e1c
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_jar/debug/bundleLibRuntimeToJarDebug/classes.jar differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_jar/release/bundleLibRuntimeToJarRelease/classes.jar b/node_modules/@capacitor-community/background-geolocation/android/build/intermediates/runtime_library_classes_jar/release/bundleLibRuntimeToJarRelease/classes.jar
 new file mode 100644
@@ -4628,26 +4628,17 @@ index 0000000..26d33e3
 +		INJECTED from /Users/aa/Documents/Dev/been-there/node_modules/@capacitor-community/background-geolocation/android/src/main/AndroidManifest.xml
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/tmp/compileDebugJavaWithJavac/previous-compilation-data.bin b/node_modules/@capacitor-community/background-geolocation/android/build/tmp/compileDebugJavaWithJavac/previous-compilation-data.bin
 new file mode 100644
-index 0000000..ad34db7
+index 0000000..9bb2281
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/tmp/compileDebugJavaWithJavac/previous-compilation-data.bin differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/build/tmp/compileReleaseJavaWithJavac/previous-compilation-data.bin b/node_modules/@capacitor-community/background-geolocation/android/build/tmp/compileReleaseJavaWithJavac/previous-compilation-data.bin
 new file mode 100644
 index 0000000..9bb2281
 Binary files /dev/null and b/node_modules/@capacitor-community/background-geolocation/android/build/tmp/compileReleaseJavaWithJavac/previous-compilation-data.bin differ
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/src/main/java/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation.java b/node_modules/@capacitor-community/background-geolocation/android/src/main/java/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation.java
-index a92fcf9..dbd129c 100644
+index a92fcf9..61aeb51 100644
 --- a/node_modules/@capacitor-community/background-geolocation/android/src/main/java/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation.java
 +++ b/node_modules/@capacitor-community/background-geolocation/android/src/main/java/com/equimaps/capacitor_background_geolocation/BackgroundGeolocation.java
-@@ -34,6 +34,8 @@ import com.google.android.gms.tasks.OnSuccessListener;
- 
- import org.json.JSONObject;
- 
-+import java.util.Date;
-+
- import androidx.localbroadcastmanager.content.LocalBroadcastManager;
- 
- @CapacitorPlugin(
-@@ -90,71 +92,10 @@ public class BackgroundGeolocation extends Plugin {
+@@ -90,71 +90,10 @@ public class BackgroundGeolocation extends Plugin {
          if (call.getBoolean("stale", false)) {
              fetchLastLocation(call);
          }
@@ -4721,29 +4712,19 @@ index a92fcf9..dbd129c 100644
          }
          service.addWatcher(
                  call.getCallbackId(),
-@@ -256,12 +197,90 @@ public class BackgroundGeolocation extends Plugin {
-             Location location = intent.getParcelableExtra("location");
-             if (location != null) {
-                 call.resolve(formatLocation(location));
-+                // Keep the foreground notification body in sync with the last GPS fix (dev + user trust).
-+                if (service != null && call.getString("backgroundMessage") != null) {
-+                    java.text.DateFormat tf = android.text.format.DateFormat.getTimeFormat(context);
-+                    String lastFix = "Last GPS fix: " + tf.format(new Date(location.getTime()));
-+                    Notification updated = buildBackgroundNotification(call, lastFix);
-+                    if (updated != null) {
-+                        service.updateForegroundNotification(updated);
-+                    }
-+                }
-             } else {
-                 Logger.debug("No locations received");
-             }
+@@ -262,6 +201,83 @@ public class BackgroundGeolocation extends Plugin {
          }
      }
  
 +    /**
-+     * Builds the ongoing location notification. {@code contentText} is the main line (shown
-+     * in the collapsed notification); use the static background message initially, then the last
-+     * fix time after each location update.
++     * Channel ID versioned so we can raise/lower importance without users clearing app data
++     * (Android ignores importance changes on an existing channel).
++     */
++    private static final String TRACKING_NOTIFICATION_CHANNEL_ID =
++            BackgroundGeolocationService.class.getPackage().getName() + ".tracking.v2";
++
++    /**
++     * Builds the ongoing location notification (static text — avoids heads-up spam on each GPS fix).
 +     */
 +    private Notification buildBackgroundNotification(PluginCall call, String contentText) {
 +        String backgroundMessage = call.getString("backgroundMessage");
@@ -4759,8 +4740,11 @@ index a92fcf9..dbd129c 100644
 +                )
 +                .setContentText(contentText != null ? contentText : backgroundMessage)
 +                .setOngoing(true)
-+                .setPriority(Notification.PRIORITY_HIGH)
++                .setPriority(Notification.PRIORITY_LOW)
 +                .setWhen(System.currentTimeMillis());
++
++        // Note: Notification.Builder.setSilent() exists only from API 30+. Silence is handled by
++        // IMPORTANCE_LOW on the channel (no sound / heads-up).
 +
 +        try {
 +            String name = getAppString(
@@ -4803,7 +4787,7 @@ index a92fcf9..dbd129c 100644
 +        }
 +
 +        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-+            builder.setChannelId(BackgroundGeolocationService.class.getPackage().getName());
++            builder.setChannelId(TRACKING_NOTIFICATION_CHANNEL_ID);
 +        }
 +
 +        return builder.build();
@@ -4812,15 +4796,24 @@ index a92fcf9..dbd129c 100644
      // Gets the identifier of the app's resource by name, returning 0 if not found.
      private int getAppResourceIdentifier(String name, String defType) {
          return getContext().getResources().getIdentifier(
-@@ -292,7 +311,7 @@ public class BackgroundGeolocation extends Plugin {
+@@ -287,13 +303,15 @@ public class BackgroundGeolocation extends Plugin {
+                     Context.NOTIFICATION_SERVICE
+             );
+             NotificationChannel channel = new NotificationChannel(
+-                    BackgroundGeolocationService.class.getPackage().getName(),
++                    TRACKING_NOTIFICATION_CHANNEL_ID,
+                     getAppString(
                              "capacitor_background_geolocation_notification_channel_name",
                              "Background Tracking"
                      ),
 -                    NotificationManager.IMPORTANCE_DEFAULT
-+                    NotificationManager.IMPORTANCE_HIGH
++                    NotificationManager.IMPORTANCE_LOW
              );
++            channel.setDescription("Shows while Been There records your path in the background.");
++            channel.setShowBadge(false);
              channel.enableLights(false);
              channel.enableVibration(false);
+             channel.setSound(null, null);
 diff --git a/node_modules/@capacitor-community/background-geolocation/android/src/main/java/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService.java b/node_modules/@capacitor-community/background-geolocation/android/src/main/java/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService.java
 index fafbb86..67bf964 100644
 --- a/node_modules/@capacitor-community/background-geolocation/android/src/main/java/com/equimaps/capacitor_background_geolocation/BackgroundGeolocationService.java

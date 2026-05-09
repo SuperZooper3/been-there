@@ -128,7 +128,7 @@ Before creating the release build, verify the core native feature works:
 3. Tap the **Track** button in the top-left panel.
 4. **Location**: your phone will ask for location — tap **Allow all the time** if you want cells to paint while the screen is locked (**While using the app** only works when Been There is open).
 5. **Notifications (Android 13+)**: a second system prompt may ask you to allow notifications. Tap **Allow** — without this, the ongoing tracking alert may not appear in the shade (the app still uses a foreground service, but the OS can hide the visible notification).
-6. Pull down the notification shade. You should see **Been There** with a line like **Last GPS fix: …** (updates whenever a new GPS sample arrives). That confirms the foreground service is running.
+6. Pull down the notification shade. You should see **Been There** with a short line like **Recording your path** (silent, low priority — it does not re-alert on every GPS ping). That confirms the foreground service is running.
 7. Walk around, lock your phone and put it in your pocket for 2–3 minutes.
 8. Unlock and open the app. New cells should have been painted while the screen was locked.
 
@@ -141,7 +141,7 @@ The stats panel also shows **Last GPS: …** while tracking on Android, so you c
 
 Standard Android (Google Pixel, Android One) does not have this problem.
 
-**If you still never see the tracking notification** after allowing notifications: uninstall Been There once, reinstall the debug APK, and try again — Android caches notification channel settings per install; a clean install picks up the high-importance channel used for tracking.
+**If you still never see the tracking notification** after allowing notifications: uninstall Been There once, reinstall the debug APK, and try again — Android caches notification channel settings per install; a clean install picks up the current channel used for tracking.
 
 ---
 
@@ -303,7 +303,7 @@ CAPACITOR_ENV=production npx cap sync
 
 ### Background tracking stops after a few minutes
 - OEM battery optimization (Samsung, Xiaomi, Huawei). See Step 7 — set battery to **Unrestricted** for the app.
-- Confirm the foreground service notification is visible in the status bar while tracking. If it disappears, the OS killed the service.
+- Confirm the tracking notification appears in the **notification shade** while tracking (it may not show a persistent icon in the status bar — that is normal for a low-noise channel). If nothing appears in the shade at all, check notification permission and try a reinstall as in Step 7.
 
 ### "App not installed" when sideloading
 - The APK was signed with a different keystore than the version already installed. Uninstall the existing app first, then install the new APK. (All local data will be cleared, but everything is synced to Supabase so nothing is lost.)

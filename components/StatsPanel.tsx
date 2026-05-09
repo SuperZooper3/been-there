@@ -18,6 +18,8 @@ interface Props {
   trackingDenied?: boolean;
   /** Android native: show last GPS fix time under stats while tracking */
   nativeLastGpsAtMs?: number | null;
+  /** Native app: tap logo to reopen tips / permission guide */
+  onNativeTipsClick?: () => void;
 }
 
 export default function StatsPanel({
@@ -30,6 +32,7 @@ export default function StatsPanel({
   isLoading = false,
   trackingDenied = false,
   nativeLastGpsAtMs = null,
+  onNativeTipsClick,
 }: Props) {
   const dashOffset = CIRC * (1 - trackingProgress / 100);
 
@@ -70,14 +73,43 @@ export default function StatsPanel({
     >
       {/* Left content */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0" }}>
-        <Image
-          src="/been-there-long.png"
-          alt="Been There"
-          width={400}
-          height={96}
-          style={{ width: "auto", height: 39 }}
-          priority
-        />
+        {onNativeTipsClick ? (
+          <button
+            type="button"
+            onClick={onNativeTipsClick}
+            title="Tips & permissions"
+            aria-label="Open tips and permissions"
+            style={{
+              padding: 0,
+              margin: 0,
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              display: "block",
+              lineHeight: 0,
+              touchAction: "manipulation",
+              WebkitTapHighlightColor: "transparent",
+            }}
+          >
+            <Image
+              src="/been-there-long.png"
+              alt="Been There"
+              width={400}
+              height={96}
+              style={{ width: "auto", height: 39, display: "block" }}
+              priority
+            />
+          </button>
+        ) : (
+          <Image
+            src="/been-there-long.png"
+            alt="Been There"
+            width={400}
+            height={96}
+            style={{ width: "auto", height: 39 }}
+            priority
+          />
+        )}
 
         <div style={{ width: 1, height: 24, background: "var(--color-border)" }} />
 
