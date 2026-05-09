@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
+import { Capacitor } from "@capacitor/core";
+import { App as CapApp } from "@capacitor/app";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, MapMouseEvent, MapTouchEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -210,6 +212,16 @@ export default function Map({
     });
 
     mapRef.current = map;
+
+    // On native: recover MapLibre's WebGL context if iOS discards it when the app is backgrounded (H5)
+    if (Capacitor.isNativePlatform()) {
+      CapApp.addListener("appStateChange", ({ isActive }) => {
+        if (isActive && mapRef.current) {
+          mapRef.current.resize();
+        }
+      });
+    }
+
     return () => { map.remove(); mapRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -389,7 +401,7 @@ export default function Map({
           .setLngLat([photo.lng, photo.lat]).addTo(map);
       }
     });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line
 
   useEffect(() => { renderMarkersRef.current = renderMarkers; }, [renderMarkers]);
 

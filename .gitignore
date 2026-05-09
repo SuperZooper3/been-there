@@ -35,6 +35,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Android release keystores — never commit signing keys
+*.jks
+*.keystore
+
 # next-pwa generated service worker files (built at deploy time)
 /public/sw.js
 /public/sw.js.map

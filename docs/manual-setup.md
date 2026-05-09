@@ -102,3 +102,13 @@ Open [http://localhost:3000](http://localhost:3000). Enter your email, check you
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase > Project Settings > API | Yes |
 
 Stadia Maps requires no env var — it authenticates via domain in production and works on localhost with no setup
+
+---
+
+## 8. Build the Android app (optional — for background GPS tracking)
+
+Background geolocation requires the native Android app. See the full step-by-step guide:
+
+→ **[`docs/android-setup.md`](./android-setup.md)**
+
+It covers installing Android Studio, building a debug build, creating a release keystore, generating a signed APK, and sideloading it onto a device.

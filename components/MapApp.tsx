@@ -1,6 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { Capacitor, registerPlugin } from "@capacitor/core";
+import type { BackgroundGeolocationPlugin, Location as BGLocation, CallbackError } from "@capacitor-community/background-geolocation";
+
+// Pure-native Capacitor plugin — no JS bundle to import; accessed via the native bridge.
+// Safe to register at module level: returns a no-op proxy on web (never called outside isNativePlatform()).
+const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>("BackgroundGeolocation");
 import { resolutionForZoom, snapToCell, cellToCenter, getCellsAlongLine, getParentCell, DRAW_RESOLUTION } from "@/lib/h3";
 import {
   initialStack,
@@ -16,6 +22,14 @@ import StatsPanel from "./StatsPanel";
 import PolaroidPin from "./PolaroidPin";
 import PinDropDialog from "./PinDropDialog";
 import GeoUploadDialog from "./GeoUploadDialog";
+import {
+  appendOfflinePaintQueue,
+  appendOfflineEraseQueue,
+  getOfflinePaintQueue,
+  getOfflineEraseQueue,
+  clearOfflinePaintQueue,
+  clearOfflineEraseQueue,
+} from "@/lib/offline-buffer";
 
 export type MapMode = "browse" | "draw" | "erase" | "pin";
 
@@ -48,6 +62,8 @@ export default function MapApp() {
   const [trackingProgress, setTrackingProgress] = useState(0); // 0–100
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [trackingDenied, setTrackingDenied] = useState(false);
+  // Native-only: true when iOS location permission is "When In Use" rather than "Always"
+  const [trackingBackgroundLimited, setTrackingBackgroundLimited] = useState(false);
   // Manual draw mode — hidden by default, revealed when location is denied
   const [drawUnlocked, setDrawUnlocked] = useState(false);
   const [showDrawModal, setShowDrawModal] = useState(false);
@@ -55,6 +71,11 @@ export default function MapApp() {
   const trackingElapsedRef = useRef(0);
   // Previous ping location — used to interpolate cells along the path between pings
   const prevLocationRef = useRef<{ lat: number; lng: number } | null>(null);
+  // Native background geolocation watcher ID — kept in ref so stopTracking can remove it
+  const nativeWatcherIdRef = useRef<string | null>(null);
+  // Stable ref to applyLocation — updated every render so the native plugin callback
+  // always calls the latest version without capturing a stale closure.
+  const applyLocationRef = useRef<(lat: number, lng: number) => void>(() => {});
 
   // Batch paint queue: flush to API every 500ms
   const pendingPaintRef = useRef<Set<string>>(new Set());
@@ -100,26 +121,85 @@ export default function MapApp() {
     load();
   }, []);
 
-  // Flush pending cell changes to API
+  // isSyncing prevents the reconnect flush and the 500ms batch from racing (M2)
+  const isSyncingRef = useRef(false);
+
+  // Flush the localStorage offline queues to the server.
+  // Erases are sent first so a cell erased offline isn't re-added by a pending paint.
+  const syncOfflineQueues = useCallback(async () => {
+    if (isSyncingRef.current) return;
+    const toErase = getOfflineEraseQueue();
+    const toPaint = getOfflinePaintQueue();
+    if (toErase.length === 0 && toPaint.length === 0) return;
+    isSyncingRef.current = true;
+    try {
+      if (toErase.length > 0) {
+        await fetch("/api/cells", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cells: toErase }),
+        });
+        clearOfflineEraseQueue();
+      }
+      if (toPaint.length > 0) {
+        await fetch("/api/cells", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cells: toPaint }),
+        });
+        clearOfflinePaintQueue();
+      }
+    } catch {
+      // Leave queues intact — will retry on next reconnect or load
+    } finally {
+      isSyncingRef.current = false;
+    }
+  }, []);
+
+  // Attempt offline queue sync on mount and whenever the device comes back online
+  useEffect(() => {
+    syncOfflineQueues();
+    window.addEventListener("online", syncOfflineQueues);
+    return () => window.removeEventListener("online", syncOfflineQueues);
+  }, [syncOfflineQueues]);
+
+  // Flush pending cell changes to API, falling back to localStorage when offline (M1, M2)
   const flushPending = useCallback(async () => {
     const toPaint = [...pendingPaintRef.current];
     const toErase = [...pendingEraseRef.current];
     pendingPaintRef.current = new Set();
     pendingEraseRef.current = new Set();
 
-    if (toPaint.length > 0) {
-      await fetch("/api/cells", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cells: toPaint }),
-      });
+    if (!navigator.onLine) {
+      // Offline — persist to localStorage; will be flushed on reconnect
+      if (toPaint.length > 0) appendOfflinePaintQueue(toPaint);
+      if (toErase.length > 0) appendOfflineEraseQueue(toErase);
+      return;
     }
-    if (toErase.length > 0) {
-      await fetch("/api/cells", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cells: toErase }),
-      });
+
+    // Erases first — same ordering rule as syncOfflineQueues
+    try {
+      if (toErase.length > 0) {
+        await fetch("/api/cells", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cells: toErase }),
+        });
+      }
+    } catch {
+      if (toErase.length > 0) appendOfflineEraseQueue(toErase);
+    }
+
+    try {
+      if (toPaint.length > 0) {
+        await fetch("/api/cells", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cells: toPaint }),
+        });
+      }
+    } catch {
+      if (toPaint.length > 0) appendOfflinePaintQueue(toPaint);
     }
   }, []);
 
@@ -317,20 +397,54 @@ export default function MapApp() {
 
     prevLocationRef.current = { lat, lng };
   }
+  // Keep ref current every render so the native plugin callback never holds a stale closure (M3)
+  applyLocationRef.current = applyLocation;
 
-  function startTracking() {
-    if (!navigator.geolocation) { setTrackingDenied(true); return; }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        applyLocation(pos.coords.latitude, pos.coords.longitude);
+  async function startTracking() {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const watcherId = await BackgroundGeolocation.addWatcher(
+          {
+            backgroundMessage: "Recording your path",
+            backgroundTitle: "Been There",
+            requestPermissions: true,
+            stale: false,
+            distanceFilter: 15, // metres — filters GPS noise when stationary
+          },
+          (location: BGLocation | undefined, error: CallbackError | undefined) => {
+            if (error || !location) return;
+            // Route through ref so we always call the latest applyLocation (M3)
+            applyLocationRef.current(location.latitude, location.longitude);
+          }
+        );
+        nativeWatcherIdRef.current = watcherId;
         setIsTracking(true);
         setTrackingDenied(false);
-        trackingElapsedRef.current = 0;
-        setTrackingProgress(0);
-      },
-      () => setTrackingDenied(true),
-      { enableHighAccuracy: true, timeout: 10_000 }
-    );
+
+        // On iOS, the first OS prompt always grants "When In Use", not "Always".
+        // Background tracking silently stops when the screen is locked until the user
+        // upgrades to "Always" in Settings. Show a persistent reminder banner.
+        if (Capacitor.getPlatform() === "ios") {
+          setTrackingBackgroundLimited(true);
+        }
+      } catch {
+        setTrackingDenied(true);
+      }
+    } else {
+      // Web path — unchanged
+      if (!navigator.geolocation) { setTrackingDenied(true); return; }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          applyLocation(pos.coords.latitude, pos.coords.longitude);
+          setIsTracking(true);
+          setTrackingDenied(false);
+          trackingElapsedRef.current = 0;
+          setTrackingProgress(0);
+        },
+        () => setTrackingDenied(true),
+        { enableHighAccuracy: true, timeout: 10_000 }
+      );
+    }
   }
 
   function handleTrackToggle() {
@@ -344,6 +458,15 @@ export default function MapApp() {
   }
 
   function stopTracking() {
+    if (Capacitor.isNativePlatform()) {
+      // Capture ID into a local var BEFORE clearing the ref (S2 — avoids null read in async callback)
+      const watcherId = nativeWatcherIdRef.current;
+      nativeWatcherIdRef.current = null;
+      if (watcherId) {
+        BackgroundGeolocation.removeWatcher({ id: watcherId });
+      }
+      setTrackingBackgroundLimited(false);
+    }
     setIsTracking(false);
     setCurrentLocation(null);
     setTrackingProgress(0);
@@ -352,8 +475,9 @@ export default function MapApp() {
     if (trackingTimerRef.current) { clearInterval(trackingTimerRef.current); trackingTimerRef.current = null; }
   }
 
+  // Web-only polling loop — guarded so it never runs on native (where the plugin handles updates)
   useEffect(() => {
-    if (!isTracking) return;
+    if (!isTracking || Capacitor.isNativePlatform()) return;
     const INTERVAL_MS = 60_000;
     const TICK_MS = 150;
     trackingTimerRef.current = setInterval(() => {
@@ -439,11 +563,55 @@ export default function MapApp() {
         photoCount={photos.length}
         onUpload={() => setGeoUploadOpen(true)}
         isTracking={isTracking}
-        trackingProgress={trackingProgress}
+        // On native the plugin fires on movement, not on a 60s timer — progress ring is meaningless
+        trackingProgress={Capacitor.isNativePlatform() ? 0 : trackingProgress}
         onToggleTracking={handleTrackToggle}
         isLoading={isLoading}
         trackingDenied={trackingDenied}
       />
+
+      {/* iOS background location permission warning — shown when only "When In Use" was granted.
+          Tracking still works (foreground only) but background recording won't happen. */}
+      {trackingBackgroundLimited && isTracking && (
+        <div
+          style={{
+            position: "absolute",
+            top: 70,
+            left: 12,
+            right: 12,
+            zIndex: 30,
+            background: "var(--color-orange)",
+            borderRadius: 12,
+            padding: "10px 14px",
+            boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+          }}
+        >
+          <span style={{ fontSize: 12, color: "var(--color-text)", lineHeight: 1.5, flex: 1 }}>
+            Background tracking limited. Tap to enable in Settings → Privacy → Location → Been There → Always.
+          </span>
+          <button
+            onClick={() => BackgroundGeolocation.openSettings()}
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--color-text)",
+              background: "rgba(0,0,0,0.12)",
+              border: "none",
+              borderRadius: 8,
+              padding: "5px 10px",
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              touchAction: "manipulation",
+            }}
+          >
+            Open Settings
+          </button>
+        </div>
+      )}
 
       <DrawControls
         mode={mode}
