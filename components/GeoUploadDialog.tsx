@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import exifr from "exifr";
+import { readImageGps } from "@/lib/read-image-gps";
 
 type Stage =
   | { type: "idle" }
@@ -33,11 +33,9 @@ export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: P
     setStage({ type: "loading" });
     const preview = URL.createObjectURL(file);
     try {
-      const gps = await exifr.gps(file);
-      const lat = gps?.latitude;
-      const lng = gps?.longitude;
-      if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
-        setStage({ type: "geolocated", file, preview, lat, lng });
+      const coords = await readImageGps(file);
+      if (coords) {
+        setStage({ type: "geolocated", file, preview, lat: coords.lat, lng: coords.lng });
       } else {
         setStage({ type: "no-gps", file, preview });
       }
@@ -250,7 +248,9 @@ export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: P
                 No location data found
               </p>
               <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)", lineHeight: 1.5 }}>
-                This photo doesn&apos;t have GPS tags. You can place it manually by tapping the map.
+                We couldn&apos;t read GPS from this file&apos;s metadata. On Android, some gallery apps strip
+                location when handing photos to the browser; try the same photo from <strong>Files</strong> or your
+                camera folder if you know it was geotagged. You can also place it manually on the map.
               </p>
             </div>
 
