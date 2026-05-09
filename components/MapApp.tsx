@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Capacitor, registerPlugin } from "@capacitor/core";
+import { App } from "@capacitor/app";
 import type { BackgroundGeolocationPlugin, Location as BGLocation, CallbackError } from "@capacitor-community/background-geolocation";
 
 // Pure-native Capacitor plugin — no JS bundle to import; accessed via the native bridge.
@@ -31,6 +32,11 @@ import {
   clearOfflinePaintQueue,
   clearOfflineEraseQueue,
 } from "@/lib/offline-buffer";
+
+/** Native background tracking: fewer GPS wakeups (larger = less frequent fixes, better battery). */
+const NATIVE_DISTANCE_FILTER_M = 48;
+/** How often to POST batched cell paints while native tracking (also flushes on app foreground / pause / stop). */
+const NATIVE_TRACK_FLUSH_MS = 10 * 60 * 1000;
 
 export type MapMode = "browse" | "draw" | "erase" | "pin";
 
@@ -71,6 +77,8 @@ export default function MapApp() {
   const [showNativeOnboarding, setShowNativeOnboarding] = useState(false);
   /** Android: last GPS sample time from native plugin (ms), mirrors notification “Last GPS fix” */
   const [lastNativeGpsAtMs, setLastNativeGpsAtMs] = useState<number | null>(null);
+  const isTrackingRef = useRef(false);
+  isTrackingRef.current = isTracking;
   const trackingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const trackingElapsedRef = useRef(0);
   // Previous ping location — used to interpolate cells along the path between pings
@@ -81,10 +89,12 @@ export default function MapApp() {
   // always calls the latest version without capturing a stale closure.
   const applyLocationRef = useRef<(lat: number, lng: number) => void>(() => {});
 
-  // Batch paint queue: flush to API every 500ms
+  // Batch paint queue: flush to API every 500ms on web / manual draw; native tracking uses a 10 min timer + lifecycle flushes.
   const pendingPaintRef = useRef<Set<string>>(new Set());
   const pendingEraseRef = useRef<Set<string>>(new Set());
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushPendingRef = useRef<() => Promise<void>>(async () => {});
+  const syncOfflineQueuesRef = useRef<() => Promise<void>>(async () => {});
 
   // Stable refs so handleCellErase can read current values without re-creating
   const renderResolutionRef = useRef(renderResolution);
@@ -214,7 +224,40 @@ export default function MapApp() {
     }
   }, []);
 
+  flushPendingRef.current = flushPending;
+  syncOfflineQueuesRef.current = syncOfflineQueues;
+
+  // Native tracking: periodic server sync (cells already update the map locally).
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || !isTracking) return;
+    const id = window.setInterval(() => {
+      void flushPendingRef.current();
+    }, NATIVE_TRACK_FLUSH_MS);
+    return () => clearInterval(id);
+  }, [isTracking]);
+
+  // Native: flush when foregrounding / backgrounding; failed POSTs stay in offline queues until retry.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let sub: Awaited<ReturnType<typeof App.addListener>> | undefined;
+    void App.addListener("appStateChange", ({ isActive }) => {
+      void flushPendingRef.current();
+      if (isActive) {
+        void syncOfflineQueuesRef.current();
+      }
+    }).then((h) => {
+      sub = h;
+    });
+    return () => {
+      void sub?.remove();
+    };
+  }, []);
+
   function scheduleFlushed() {
+    // Native + tracking: cell paints accumulate; interval + app lifecycle call flush (saves battery vs 500ms polling).
+    if (Capacitor.isNativePlatform() && isTrackingRef.current) {
+      return;
+    }
     if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
     flushTimerRef.current = setTimeout(flushPending, 500);
   }
@@ -432,7 +475,7 @@ export default function MapApp() {
             backgroundTitle: "Been There",
             requestPermissions: true,
             stale: false,
-            distanceFilter: 15, // metres — filters GPS noise when stationary
+            distanceFilter: NATIVE_DISTANCE_FILTER_M, // metres — larger ⇒ fewer GPS wakeups & better battery (path still interpolated between fixes)
           },
           (location: BGLocation | undefined, error: CallbackError | undefined) => {
             if (error || !location) return;
@@ -485,6 +528,7 @@ export default function MapApp() {
   }
 
   function stopTracking() {
+    void flushPendingRef.current();
     if (Capacitor.isNativePlatform()) {
       // Capture ID into a local var BEFORE clearing the ref (S2 — avoids null read in async callback)
       const watcherId = nativeWatcherIdRef.current;
