@@ -55,6 +55,27 @@ export function clearOfflineEraseQueue(): void {
   localStorage.removeItem(ERASE_KEY);
 }
 
+/** Remove only the specified cells from a queue, leaving any newly-appended items intact. */
+export function removeFromOfflinePaintQueue(cells: string[]): void {
+  const toRemove = new Set(cells);
+  const remaining = readQueue(PAINT_KEY).filter((c) => !toRemove.has(c));
+  if (remaining.length === 0) {
+    localStorage.removeItem(PAINT_KEY);
+  } else {
+    writeQueue(PAINT_KEY, remaining);
+  }
+}
+
+export function removeFromOfflineEraseQueue(cells: string[]): void {
+  const toRemove = new Set(cells);
+  const remaining = readQueue(ERASE_KEY).filter((c) => !toRemove.has(c));
+  if (remaining.length === 0) {
+    localStorage.removeItem(ERASE_KEY);
+  } else {
+    writeQueue(ERASE_KEY, remaining);
+  }
+}
+
 export function hasOfflineQueued(): boolean {
   return getOfflinePaintQueue().length > 0 || getOfflineEraseQueue().length > 0;
 }

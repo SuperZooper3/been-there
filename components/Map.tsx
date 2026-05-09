@@ -214,15 +214,20 @@ export default function Map({
     mapRef.current = map;
 
     // On native: recover MapLibre's WebGL context if iOS discards it when the app is backgrounded (H5)
+    let appStateHandle: Awaited<ReturnType<typeof CapApp.addListener>> | undefined;
     if (Capacitor.isNativePlatform()) {
-      CapApp.addListener("appStateChange", ({ isActive }) => {
+      void CapApp.addListener("appStateChange", ({ isActive }) => {
         if (isActive && mapRef.current) {
           mapRef.current.resize();
         }
-      });
+      }).then((h) => { appStateHandle = h; });
     }
 
-    return () => { map.remove(); mapRef.current = null; };
+    return () => {
+      void appStateHandle?.remove();
+      map.remove();
+      mapRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

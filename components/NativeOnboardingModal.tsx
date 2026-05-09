@@ -74,13 +74,19 @@ export default function NativeOnboardingModal({ onClose }: Props) {
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
+    let cancelled = false;
     let sub: Awaited<ReturnType<typeof App.addListener>> | undefined;
     void App.addListener("appStateChange", ({ isActive }) => {
       if (isActive) void refresh();
     }).then((h) => {
-      sub = h;
+      if (cancelled) {
+        void h.remove();
+      } else {
+        sub = h;
+      }
     });
     return () => {
+      cancelled = true;
       void sub?.remove();
     };
   }, [refresh]);

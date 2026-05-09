@@ -4,10 +4,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { App } from "@capacitor/app";
 import type { BackgroundGeolocationPlugin, Location as BGLocation, CallbackError } from "@capacitor-community/background-geolocation";
-
-// Pure-native Capacitor plugin — no JS bundle to import; accessed via the native bridge.
-// Safe to register at module level: returns a no-op proxy on web (never called outside isNativePlatform()).
-const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>("BackgroundGeolocation");
 import { resolutionForZoom, snapToCell, cellToCenter, getCellsAlongLine, getParentCell, DRAW_RESOLUTION } from "@/lib/h3";
 import {
   initialStack,
@@ -29,9 +25,13 @@ import {
   appendOfflineEraseQueue,
   getOfflinePaintQueue,
   getOfflineEraseQueue,
-  clearOfflinePaintQueue,
-  clearOfflineEraseQueue,
+  removeFromOfflinePaintQueue,
+  removeFromOfflineEraseQueue,
 } from "@/lib/offline-buffer";
+
+// Pure-native Capacitor plugin — no JS bundle to import; accessed via the native bridge.
+// Safe to register at module level: returns a no-op proxy on web (never called outside isNativePlatform()).
+const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>("BackgroundGeolocation");
 
 /** Native background tracking: fewer GPS wakeups (larger = less frequent fixes, better battery). */
 const NATIVE_DISTANCE_FILTER_M = 48;
@@ -147,6 +147,8 @@ export default function MapApp() {
 
   // Flush the localStorage offline queues to the server.
   // Erases are sent first so a cell erased offline isn't re-added by a pending paint.
+  // We snapshot the queues once and remove only those specific cells after each fetch so that
+  // cells appended by a concurrent offline flush during the awaits are not accidentally wiped.
   const syncOfflineQueues = useCallback(async () => {
     if (isSyncingRef.current) return;
     const toErase = getOfflineEraseQueue();
@@ -160,7 +162,7 @@ export default function MapApp() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cells: toErase }),
         });
-        clearOfflineEraseQueue();
+        removeFromOfflineEraseQueue(toErase);
       }
       if (toPaint.length > 0) {
         await fetch("/api/cells", {
@@ -168,7 +170,7 @@ export default function MapApp() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cells: toPaint }),
         });
-        clearOfflinePaintQueue();
+        removeFromOfflinePaintQueue(toPaint);
       }
     } catch {
       // Leave queues intact — will retry on next reconnect or load
@@ -239,6 +241,7 @@ export default function MapApp() {
   // Native: flush when foregrounding / backgrounding; failed POSTs stay in offline queues until retry.
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
+    let cancelled = false;
     let sub: Awaited<ReturnType<typeof App.addListener>> | undefined;
     void App.addListener("appStateChange", ({ isActive }) => {
       void flushPendingRef.current();
@@ -246,9 +249,14 @@ export default function MapApp() {
         void syncOfflineQueuesRef.current();
       }
     }).then((h) => {
-      sub = h;
+      if (cancelled) {
+        void h.remove();
+      } else {
+        sub = h;
+      }
     });
     return () => {
+      cancelled = true;
       void sub?.remove();
     };
   }, []);
