@@ -52,4 +52,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <!-- Android 13+: required for the user-visible tracking notification in the shade -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+        Required on Android 10+ to read GPS/location EXIF from photos accessed via content:// URIs
+        (MediaStore). Without this, Android automatically strips GPS metadata from photos returned
+        by the file/photo picker before they reach the WebView, so exifr sees no coordinates.
+        On Android 10-11 this declaration alone may be sufficient; on Android 12+ the companion
+        native call MediaStore.setRequireOriginal() is also needed (handled by the geolocation
+        fallback path in GeoUploadDialog for Android 12+ where stripping is unconditional).
+    -->
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
 </manifest>

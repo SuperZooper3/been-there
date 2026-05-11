@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
+import { Geolocation } from "@capacitor/geolocation";
 import { readImageGps } from "@/lib/read-image-gps";
 
 type Stage =
@@ -21,7 +23,29 @@ export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: P
   const [caption, setCaption] = useState("");
   const [dragging, setDragging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [geolocating, setGeolocating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const isNative = Capacitor.isNativePlatform();
+
+  async function handleUseCurrentLocation() {
+    if (stage.type !== "no-gps") return;
+    setGeolocating(true);
+    try {
+      const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 15000 });
+      setStage({
+        type: "geolocated",
+        file: stage.file,
+        preview: stage.preview,
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+      });
+    } catch {
+      // Permission denied or timeout — stay on no-gps screen
+    } finally {
+      setGeolocating(false);
+    }
+  }
 
   // Auto-open file picker when the dialog first mounts
   useEffect(() => {
@@ -248,9 +272,9 @@ export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: P
                 No location data found
               </p>
               <p style={{ margin: 0, fontSize: 12, color: "var(--color-text-muted)", lineHeight: 1.5 }}>
-                We couldn&apos;t read GPS from this file&apos;s metadata. On Android, some gallery apps strip
-                location when handing photos to the browser; try the same photo from <strong>Files</strong> or your
-                camera folder if you know it was geotagged. You can also place it manually on the map.
+                {isNative
+                  ? "Android removes GPS metadata from gallery photos for privacy. Use your current location to tag this photo, or place it on the map manually."
+                  : "We couldn\u2019t read GPS from this file\u2019s metadata. You can place it manually on the map."}
               </p>
             </div>
 
@@ -271,19 +295,40 @@ export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: P
               >
                 Cancel
               </button>
+              {isNative && (
+                <button
+                  type="button"
+                  onClick={handleUseCurrentLocation}
+                  disabled={geolocating}
+                  style={{
+                    flex: 2,
+                    padding: "10px 0",
+                    borderRadius: 10,
+                    border: "none",
+                    background: "var(--color-teal)",
+                    color: "var(--color-text)",
+                    cursor: geolocating ? "default" : "pointer",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    opacity: geolocating ? 0.6 : 1,
+                  }}
+                >
+                  {geolocating ? "Getting location…" : "Use current location"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => onPlaceManually(stage.file)}
                 style={{
-                  flex: 2,
+                  flex: isNative ? 1 : 2,
                   padding: "10px 0",
                   borderRadius: 10,
-                  border: "none",
-                  background: "var(--color-orange)",
-                  color: "var(--color-text)",
+                  border: isNative ? "1px solid var(--color-border)" : "none",
+                  background: isNative ? "transparent" : "var(--color-orange)",
+                  color: isNative ? "var(--color-text-muted)" : "var(--color-text)",
                   cursor: "pointer",
                   fontSize: 14,
-                  fontWeight: 600,
+                  fontWeight: isNative ? 400 : 600,
                 }}
               >
                 Place manually
