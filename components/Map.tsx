@@ -50,10 +50,117 @@ const CELL_BORDER_LAYER = "visited-cells-border";
 const DESAT_SOURCE = "desaturation-source";
 const DESAT_LAYER = "desaturation-layer";
 
-// Blue (low / oldest) → yellow → red (high / newest) — consistent across all three overlays.
+// Blue = low emphasis · red = emphasis for the active overlay:
+//   lastBeen → most recent last visit · mostBeen → most visits · firstVisitAge → most recent first visit
 const INTEL_RAMP_COLD = "#1d4ed8"; // blue
 const INTEL_RAMP_MID  = "#f59e0b"; // amber
 const INTEL_RAMP_HOT  = "#dc2626"; // red
+
+/** Same for every visible cell — only hue/lightness varies via fill-color interpolation. */
+const INTEL_FILL_OPACITY = 0.9;
+
+/** Desktop: mousemove tooltip. Touch / coarse pointer: tap cell to pin; tap elsewhere to dismiss. */
+function prefersFinePointerHover(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return (
+    window.matchMedia("(hover: hover)").matches &&
+    window.matchMedia("(pointer: fine)").matches
+  );
+}
+
+function dayOrdinal(d: number): string {
+  if (d >= 11 && d <= 13) return `${d}th`;
+  switch (d % 10) {
+    case 1:
+      return `${d}st`;
+    case 2:
+      return `${d}nd`;
+    case 3:
+      return `${d}rd`;
+    default:
+      return `${d}th`;
+  }
+}
+
+/** e.g. "Monday May 7th 2026" — no time of day. */
+function formatCalendarDateNoTime(iso: string): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "—";
+  const date = new Date(t);
+  const weekday = new Intl.DateTimeFormat(undefined, { weekday: "long" }).format(date);
+  const month = new Intl.DateTimeFormat(undefined, { month: "long" }).format(date);
+  const year = date.getFullYear();
+  return `${weekday} ${month} ${dayOrdinal(date.getDate())} ${year}`;
+}
+
+type IntelFeatProps = {
+  intelHasData?: boolean | string | number | null;
+  intelAggregated?: boolean | string | number | null;
+  intelFirstAt?: string | null;
+  intelLastAt?: string | null;
+  intelVisitCount?: number | null;
+};
+
+function escapeHtmlText(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/** One compact pill: single line for the active Intelligence mode only. */
+function intelTooltipPillHtml(
+  props: IntelFeatProps | null | undefined,
+  variant: IntelligenceVariant
+): string {
+  const hasData =
+    props !== null &&
+    props !== undefined &&
+    (props.intelHasData === true ||
+      props.intelHasData === 1 ||
+      props.intelHasData === "true");
+  const first = typeof props?.intelFirstAt === "string" ? props.intelFirstAt : "";
+  const last = typeof props?.intelLastAt === "string" ? props.intelLastAt : "";
+  const countRaw = props?.intelVisitCount;
+  const parsed =
+    typeof countRaw === "number" && !Number.isNaN(countRaw)
+      ? countRaw
+      : Number(countRaw);
+  const visitCount = Number.isFinite(parsed) ? parsed : 0;
+
+  let text: string;
+  if (!hasData || !first) {
+    text = "No data";
+  } else if (variant === "lastBeen") {
+    text = last
+      ? `Last visited ${formatCalendarDateNoTime(last)}`
+      : "Last visited —";
+  } else if (variant === "mostBeen") {
+    text = visitCount <= 1 ? "Visited once" : `${visitCount} visits`;
+  } else if (variant === "firstVisitAge") {
+    text = `First visited ${formatCalendarDateNoTime(first)}`;
+  } else {
+    text = "";
+  }
+
+  const pillStyle =
+    "display:inline-block;margin:0;" +
+    "background:var(--color-surface);" +
+    "border:1px solid var(--color-border);" +
+    "border-radius:999px;" +
+    "padding:3px 9px;" +
+    "font-family:inherit;" +
+    "font-size:10px;" +
+    "line-height:1.35;" +
+    "font-weight:600;" +
+    "color:var(--color-text);" +
+    "letter-spacing:0.01em;" +
+    "white-space:nowrap;" +
+    "box-shadow:0 2px 8px rgba(0,0,0,0.08);" +
+    "max-width:min(92vw,260px);" +
+    "overflow:hidden;text-overflow:ellipsis;";
+  return `<div role="tooltip" style="${pillStyle}">${escapeHtmlText(text)}</div>`;
+}
 
 function applyIntelligenceLayerPaint(
   map: maplibregl.Map,
@@ -65,14 +172,14 @@ function applyIntelligenceLayerPaint(
     map.setPaintProperty(CELL_LAYER, "fill-opacity", 0);
     return;
   }
-  // All three overlays use the same blue → amber → red ramp driven by `intelNorm` (0–1).
+  // All three overlays: red = emphasized extreme · blue = low end of the scale.
   map.setPaintProperty(CELL_LAYER, "fill-color", [
     "interpolate", ["linear"], ["get", "intelNorm"],
     0,   INTEL_RAMP_COLD,
     0.5, INTEL_RAMP_MID,
     1,   INTEL_RAMP_HOT,
   ]);
-  map.setPaintProperty(CELL_LAYER, "fill-opacity", 0.65);
+  map.setPaintProperty(CELL_LAYER, "fill-opacity", INTEL_FILL_OPACITY);
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +211,6 @@ function buildCellFeatures(
   if (variant === "none" || present.length === 0) {
     for (const id of displayCells) norms.set(id, 0);
   } else {
-    const now = Date.now();
     if (variant === "lastBeen") {
       const ts = present.map((p) => +new Date(p.last_visited_at).getTime());
       const min = Math.min(...ts);
@@ -141,31 +247,35 @@ function buildCellFeatures(
           );
         }
       }
-    } else {
-      const stals = present.map(
-        (p) => now - +new Date(p.first_visited_at).getTime()
-      );
-      const minS = Math.min(...stals);
-      const maxS = Math.max(...stals);
-      if (minS === maxS) {
+    } else if (variant === "firstVisitAge") {
+      // Red = newest first_visited_at (“most recently first visited”); blue = earliest first visit.
+      const ts = present.map((p) => +new Date(p.first_visited_at).getTime());
+      const min = Math.min(...ts);
+      const max = Math.max(...ts);
+      if (min === max) {
         for (const id of displayCells) {
           norms.set(id, lookup.get(id) ? 1 : 0);
         }
       } else {
-        const denS = maxS - minS;
+        const den = max - min;
         for (const id of displayCells) {
           const r = lookup.get(id);
-          const s = r ? now - +new Date(r.first_visited_at).getTime() : minS;
-          norms.set(id, (s - minS) / denS);
+          norms.set(
+            id,
+            r ? (+new Date(r.first_visited_at).getTime() - min) / den : 0
+          );
         }
       }
     }
   }
 
+  const intelAggregated = internalRes < DRAW_RESOLUTION;
+
   return {
     type: "FeatureCollection",
     features: displayCells.map((h3Index) => {
       const boundary = getCellBoundary(h3Index);
+      const r = lookup.get(h3Index);
       return {
         type: "Feature",
         geometry: {
@@ -175,6 +285,11 @@ function buildCellFeatures(
         properties: {
           h3Index,
           intelNorm: norms.get(h3Index) ?? 0,
+          intelHasData: !!r,
+          intelAggregated,
+          intelFirstAt: r?.first_visited_at ?? "",
+          intelLastAt: r?.last_visited_at ?? "",
+          intelVisitCount: r?.visit_count ?? 0,
         },
       };
     }),
@@ -233,6 +348,11 @@ export default function Map({
   const cellMetricsRes9Ref = useRef<VisitMetricRow[]>([]);
   intelligenceVariantRef.current = intelligenceVariant;
   cellMetricsRes9Ref.current = cellMetricsRes9;
+  const modeRef = useRef<MapMode>(mode);
+  modeRef.current = mode;
+
+  /** Mobile / coarse pointer: tap to pin a details popup (desktop uses hover). */
+  const intelStickyPopupRef = useRef<maplibregl.Popup | null>(null);
 
   // The source-update function is stored in a ref so that event handlers
   // registered once (during map init) always call the latest version.
@@ -432,6 +552,39 @@ export default function Map({
     const handleUp = () => { isPaintingRef.current = false; };
     const handleClick = (e: MapMouseEvent) => {
       if (isKPressedRef.current) { onDebugLocation?.(e.lngLat.lat, e.lngLat.lng); return; }
+
+      if (
+        intelligenceVariantRef.current !== "none" &&
+        mode === "browse" &&
+        !prefersFinePointerHover()
+      ) {
+        const feats = map.queryRenderedFeatures(e.point, { layers: [CELL_LAYER] });
+        const f = feats[0];
+        if (f?.properties) {
+          intelStickyPopupRef.current?.remove();
+          intelStickyPopupRef.current = null;
+          const html = intelTooltipPillHtml(
+            f.properties as IntelFeatProps,
+            intelligenceVariantRef.current
+          );
+          const p = new maplibregl.Popup({
+            closeButton: false,
+            closeOnClick: false,
+            maxWidth: "none",
+            className: "intel-cell-popup",
+            offset: 8,
+          })
+            .setLngLat(e.lngLat)
+            .setHTML(html)
+            .addTo(map);
+          intelStickyPopupRef.current = p;
+          return;
+        }
+        intelStickyPopupRef.current?.remove();
+        intelStickyPopupRef.current = null;
+        return;
+      }
+
       if (mode !== "pin") return;
       onPinDrop(e.lngLat.lat, e.lngLat.lng);
     };
@@ -448,6 +601,100 @@ export default function Map({
       map.off("click", handleClick);
     };
   }, [mode, onCellPaint, onCellErase, onPinDrop, onDebugLocation]);
+
+  // Hover tooltips while Intelligence is on (fine pointer); tap handled in handleClick above.
+  useEffect(() => {
+    if (intelligenceVariant === "none") {
+      return () => {};
+    }
+
+    const map = mapRef.current;
+    if (!map) return () => {};
+
+    let hoverPopup: maplibregl.Popup | null = null;
+    let raf = 0;
+    let lastCellKey = "";
+
+    const removeHover = () => {
+      hoverPopup?.remove();
+      hoverPopup = null;
+      lastCellKey = "";
+    };
+
+    const onMove = (e: MapMouseEvent) => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (intelligenceVariantRef.current === "none" || modeRef.current !== "browse") {
+          removeHover();
+          return;
+        }
+        if (!prefersFinePointerHover()) {
+          removeHover();
+          return;
+        }
+        const feats = map.queryRenderedFeatures(e.point, { layers: [CELL_LAYER] });
+        const f = feats[0];
+        if (!f?.properties) {
+          removeHover();
+          return;
+        }
+        const key = String((f.properties as IntelFeatProps & { h3Index?: string }).h3Index ?? "");
+        if (key && key === lastCellKey && hoverPopup) return;
+        lastCellKey = key;
+        removeHover();
+        const html = intelTooltipPillHtml(
+          f.properties as IntelFeatProps,
+          intelligenceVariantRef.current
+        );
+        hoverPopup = new maplibregl.Popup({
+          closeButton: false,
+          closeOnClick: false,
+          maxWidth: "none",
+          className: "intel-cell-popup",
+          offset: 8,
+        })
+          .setLngLat(e.lngLat)
+          .setHTML(html)
+          .addTo(map);
+      });
+    };
+
+    const onLeave = () => {
+      cancelAnimationFrame(raf);
+      removeHover();
+    };
+
+    let cancelled = false;
+    const attach = () => {
+      if (cancelled || !map.getLayer(CELL_LAYER)) return;
+      map.on("mousemove", onMove);
+      map.getCanvas().addEventListener("mouseleave", onLeave);
+    };
+
+    const onStyleReady = () => {
+      if (cancelled) return;
+      attach();
+    };
+
+    if (map.isStyleLoaded()) onStyleReady();
+    else map.once("load", onStyleReady);
+
+    return () => {
+      cancelled = true;
+      map.off("load", onStyleReady);
+      map.off("mousemove", onMove);
+      map.getCanvas().removeEventListener("mouseleave", onLeave);
+      cancelAnimationFrame(raf);
+      removeHover();
+    };
+  }, [intelligenceVariant, mode]);
+
+  useEffect(() => {
+    if (intelligenceVariant === "none" || mode !== "browse") {
+      intelStickyPopupRef.current?.remove();
+      intelStickyPopupRef.current = null;
+    }
+  }, [intelligenceVariant, mode]);
 
   // Keep onPinClick ref current
   useEffect(() => { onPinClickRef.current = onPinClick; }, [onPinClick]);

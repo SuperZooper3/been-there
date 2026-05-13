@@ -15,7 +15,7 @@ Been There is a map-based memory app where you color in real-world areas you've 
 - **Photo pins** — drop polaroid-style photo memories anywhere on the map with an optional caption
 - **EXIF-aware uploads** — photos with GPS metadata place themselves automatically; others can be placed manually
 - **Photo clusters** — nearby pins cluster at low zoom and expand as you zoom in
-- **Intelligence** — sparkle toggle on the bottom bar: recency (last been), visit frequency (most been), and first-visit age overlays on explored cells
+- **Intelligence** — sparkle toggle on the bottom bar: recency (last been), visit frequency (most been), and first visited overlays on explored cells
 - **PWA** — installable on iOS and Android with full offline support, home-screen icon, and splash screen
 
 ---

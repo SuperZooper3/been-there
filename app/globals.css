@@ -68,3 +68,18 @@ body {
 .maplibregl-ctrl-bottom-right {
   display: none !important;
 }
+
+/* Intelligence tooltips — compact pill only; match app chrome (no default popup frame) */
+.intel-cell-popup.maplibregl-popup {
+  background: transparent !important;
+}
+.intel-cell-popup .maplibregl-popup-tip {
+  display: none;
+}
+.intel-cell-popup .maplibregl-popup-content {
+  padding: 0 !important;
+  margin: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0;
+}

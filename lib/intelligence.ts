@@ -3,5 +3,5 @@ export type IntelligenceVariant = "none" | "lastBeen" | "mostBeen" | "firstVisit
 export const INTELLIGENCE_LABELS: Record<Exclude<IntelligenceVariant, "none">, string> = {
   lastBeen: "Last been",
   mostBeen: "Most been",
-  firstVisitAge: "First visit age",
+  firstVisitAge: "First visited",
 };
