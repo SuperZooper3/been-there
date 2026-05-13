@@ -78,11 +78,11 @@ export default function PolaroidPin({ photo, onClose, onDelete }: Props) {
               onClick={() => setConfirming(true)}
               style={{
                 background: "none",
-                border: "1px solid #ddd",
+                border: "1px solid #e53e3e",
                 borderRadius: 4,
                 cursor: "pointer",
                 fontSize: 11,
-                color: "#999",
+                color: "#e53e3e",
                 padding: "3px 8px",
                 marginLeft: "auto",
                 letterSpacing: "0.02em",
