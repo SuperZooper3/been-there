@@ -248,7 +248,7 @@ function buildCellFeatures(
         }
       }
     } else if (variant === "firstVisitAge") {
-      // Red = newest first_visited_at (“most recently first visited”); blue = earliest first visit.
+      // Red = earliest first_visited_at; blue = newest first_visited_at.
       const ts = present.map((p) => +new Date(p.first_visited_at).getTime());
       const min = Math.min(...ts);
       const max = Math.max(...ts);
@@ -262,7 +262,7 @@ function buildCellFeatures(
           const r = lookup.get(id);
           norms.set(
             id,
-            r ? (+new Date(r.first_visited_at).getTime() - min) / den : 0
+            r ? (max - +new Date(r.first_visited_at).getTime()) / den : 0
           );
         }
       }
