@@ -50,6 +50,11 @@ const CELL_BORDER_LAYER = "visited-cells-border";
 const DESAT_SOURCE = "desaturation-source";
 const DESAT_LAYER = "desaturation-layer";
 
+// Blue (low / oldest) → yellow → red (high / newest) — consistent across all three overlays.
+const INTEL_RAMP_COLD = "#1d4ed8"; // blue
+const INTEL_RAMP_MID  = "#f59e0b"; // amber
+const INTEL_RAMP_HOT  = "#dc2626"; // red
+
 function applyIntelligenceLayerPaint(
   map: maplibregl.Map,
   variant: IntelligenceVariant
@@ -60,48 +65,14 @@ function applyIntelligenceLayerPaint(
     map.setPaintProperty(CELL_LAYER, "fill-opacity", 0);
     return;
   }
-  if (variant === "lastBeen") {
-    map.setPaintProperty(CELL_LAYER, "fill-color", [
-      "interpolate",
-      ["linear"],
-      ["get", "intelNorm"],
-      0,
-      "#2d1b69",
-      0.5,
-      "#b83280",
-      1,
-      "#ffc857",
-    ]);
-    map.setPaintProperty(CELL_LAYER, "fill-opacity", 0.52);
-    return;
-  }
-  if (variant === "mostBeen") {
-    map.setPaintProperty(CELL_LAYER, "fill-color", [
-      "interpolate",
-      ["linear"],
-      ["get", "intelNorm"],
-      0,
-      "#0d1f2d",
-      0.5,
-      "#2a6f97",
-      1,
-      "#7ee0ff",
-    ]);
-    map.setPaintProperty(CELL_LAYER, "fill-opacity", 0.52);
-    return;
-  }
+  // All three overlays use the same blue → amber → red ramp driven by `intelNorm` (0–1).
   map.setPaintProperty(CELL_LAYER, "fill-color", [
-    "interpolate",
-    ["linear"],
-    ["get", "intelNorm"],
-    0,
-    "#e8f4fc",
-    0.45,
-    "#b45309",
-    1,
-    "#3f1d0d",
+    "interpolate", ["linear"], ["get", "intelNorm"],
+    0,   INTEL_RAMP_COLD,
+    0.5, INTEL_RAMP_MID,
+    1,   INTEL_RAMP_HOT,
   ]);
-  map.setPaintProperty(CELL_LAYER, "fill-opacity", 0.5);
+  map.setPaintProperty(CELL_LAYER, "fill-opacity", 0.65);
 }
 
 // ---------------------------------------------------------------------------
@@ -275,16 +246,14 @@ export default function Map({
     // Sources are added inside the map's 'load' handler. If they don't exist
     // yet, bail — the 'load' handler will call this again once ready.
     if (!cellSource || !desatSource) return;
+    const variant = intelligenceVariantRef.current;
     const dc = computeDisplayCells(visitedCellsRef.current, internalResRef.current);
     cellSource.setData(
-      buildCellFeatures(
-        dc,
-        intelligenceVariantRef.current,
-        cellMetricsRes9Ref.current,
-        internalResRef.current
-      )
+      buildCellFeatures(dc, variant, cellMetricsRes9Ref.current, internalResRef.current)
     );
     desatSource.setData(makeDesatMask(dc));
+    // Always sync paint immediately after data so variant and colours are never split across frames.
+    applyIntelligenceLayerPaint(map, variant);
   };
 
   // Keep visitedCells ref in sync and immediately push a source update.
@@ -362,8 +331,8 @@ export default function Map({
 
       // Push whatever cells are already in the ref (handles the case where
       // the API response arrived before the map finished loading).
+      // applyIntelligenceLayerPaint is called inside updateSourcesRef.
       updateSourcesRef.current();
-      applyIntelligenceLayerPaint(map, intelligenceVariantRef.current);
     });
 
     mapRef.current = map;
@@ -635,12 +604,6 @@ export default function Map({
     clusterIndexRef.current = index;
     renderMarkers();
   }, [photos, renderMarkers]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map?.isStyleLoaded()) return;
-    applyIntelligenceLayerPaint(map, intelligenceVariant);
-  }, [intelligenceVariant, visitedCells, cellMetricsRes9]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
 }
