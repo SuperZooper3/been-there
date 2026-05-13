@@ -177,7 +177,7 @@ export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: P
         <input
           ref={inputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,text/plain"
           style={{ display: "none" }}
           onChange={handleFile}
         />
