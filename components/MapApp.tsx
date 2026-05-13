@@ -28,6 +28,8 @@ import {
   removeFromOfflinePaintQueue,
   removeFromOfflineEraseQueue,
 } from "@/lib/offline-buffer";
+import type { VisitMetricRow } from "@/lib/cell-metrics";
+import { INTELLIGENCE_LABELS, type IntelligenceVariant } from "@/lib/intelligence";
 
 // Pure-native Capacitor plugin — no JS bundle to import; accessed via the native bridge.
 // Safe to register at module level: returns a no-op proxy on web (never called outside isNativePlatform()).
@@ -77,6 +79,11 @@ export default function MapApp() {
   const [showNativeOnboarding, setShowNativeOnboarding] = useState(false);
   /** Android: last GPS sample time from native plugin (ms), mirrors notification “Last GPS fix” */
   const [lastNativeGpsAtMs, setLastNativeGpsAtMs] = useState<number | null>(null);
+  /** Res-9 rows from GET — Map aggregates by zoom for overlays */
+  const [cellMetricsRes9, setCellMetricsRes9] = useState<VisitMetricRow[]>([]);
+  const [intelligenceVariant, setIntelligenceVariant] = useState<IntelligenceVariant>("none");
+  const [intelligenceMenuOpen, setIntelligenceMenuOpen] = useState(false);
+  const lastIntelligenceVariantRef = useRef<Exclude<IntelligenceVariant, "none">>("lastBeen");
   const isTrackingRef = useRef(false);
   isTrackingRef.current = isTracking;
   const trackingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -125,6 +132,9 @@ export default function MapApp() {
           if (cellsData.recentCell) {
             setInitialCenter(cellToCenter(cellsData.recentCell));
           }
+          if (Array.isArray(cellsData.cellMetrics)) {
+            setCellMetricsRes9(cellsData.cellMetrics as VisitMetricRow[]);
+          }
         }
         if (!photosData.error && photosData.photos) {
           setPhotos(photosData.photos);
@@ -148,6 +158,18 @@ export default function MapApp() {
   // isSyncing prevents the reconnect flush and the 500ms batch from racing (M2)
   const isSyncingRef = useRef(false);
 
+  const refreshCellMetrics = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/cells?zoom=13`);
+      const d = await r.json();
+      if (Array.isArray(d.cellMetrics)) {
+        setCellMetricsRes9(d.cellMetrics as VisitMetricRow[]);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   // Flush the localStorage offline queues to the server.
   // Erases are sent first so a cell erased offline isn't re-added by a pending paint.
   // We snapshot the queues once and remove only those specific cells after each fetch so that
@@ -160,27 +182,33 @@ export default function MapApp() {
     isSyncingRef.current = true;
     try {
       if (toErase.length > 0) {
-        await fetch("/api/cells", {
+        const res = await fetch("/api/cells", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cells: toErase }),
         });
-        removeFromOfflineEraseQueue(toErase);
+        if (res.ok) {
+          await refreshCellMetrics();
+          removeFromOfflineEraseQueue(toErase);
+        }
       }
       if (toPaint.length > 0) {
-        await fetch("/api/cells", {
+        const res = await fetch("/api/cells", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cells: toPaint }),
         });
-        removeFromOfflinePaintQueue(toPaint);
+        if (res.ok) {
+          await refreshCellMetrics();
+          removeFromOfflinePaintQueue(toPaint);
+        }
       }
     } catch {
       // Leave queues intact — will retry on next reconnect or load
     } finally {
       isSyncingRef.current = false;
     }
-  }, []);
+  }, [refreshCellMetrics]);
 
   // Attempt offline queue sync on mount and whenever the device comes back online
   useEffect(() => {
@@ -206,11 +234,12 @@ export default function MapApp() {
     // Erases first — same ordering rule as syncOfflineQueues
     try {
       if (toErase.length > 0) {
-        await fetch("/api/cells", {
+        const res = await fetch("/api/cells", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cells: toErase }),
         });
+        if (res.ok) await refreshCellMetrics();
       }
     } catch {
       if (toErase.length > 0) appendOfflineEraseQueue(toErase);
@@ -218,16 +247,17 @@ export default function MapApp() {
 
     try {
       if (toPaint.length > 0) {
-        await fetch("/api/cells", {
+        const res = await fetch("/api/cells", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cells: toPaint }),
         });
+        if (res.ok) await refreshCellMetrics();
       }
     } catch {
       if (toPaint.length > 0) appendOfflinePaintQueue(toPaint);
     }
-  }, []);
+  }, [refreshCellMetrics]);
 
   flushPendingRef.current = flushPending;
   syncOfflineQueuesRef.current = syncOfflineQueues;
@@ -273,30 +303,29 @@ export default function MapApp() {
     flushTimerRef.current = setTimeout(flushPending, 500);
   }
 
-  // Paint a single cell
+  // Paint a single cell (always queues server sync; undo only when the cell is newly painted)
   const handleCellPaint = useCallback(
     (h3Index: string) => {
-      setVisitedCells((prev) => {
-        if (prev.has(h3Index)) return prev;
-        const next = new Set(prev);
+      if (!visitedCellsRef.current.has(h3Index)) {
+        const next = new Set(visitedCellsRef.current);
         next.add(h3Index);
-        return next;
-      });
-      setUndoStack((s) => {
-        const last = s.past[s.past.length - 1];
-        // Merge into current stroke if it's a paint action
-        if (last?.type === "paint") {
-          if (last.cells.includes(h3Index)) return s;
-          return {
-            ...s,
-            past: [
-              ...s.past.slice(0, -1),
-              { type: "paint", cells: [...last.cells, h3Index] },
-            ],
-          };
-        }
-        return pushAction(s, { type: "paint", cells: [h3Index] });
-      });
+        visitedCellsRef.current = next;
+        setVisitedCells(next);
+        setUndoStack((s) => {
+          const last = s.past[s.past.length - 1];
+          if (last?.type === "paint") {
+            if (last.cells.includes(h3Index)) return s;
+            return {
+              ...s,
+              past: [
+                ...s.past.slice(0, -1),
+                { type: "paint", cells: [...last.cells, h3Index] },
+              ],
+            };
+          }
+          return pushAction(s, { type: "paint", cells: [h3Index] });
+        });
+      }
       pendingPaintRef.current.add(h3Index);
       scheduleFlushed();
     },
@@ -542,6 +571,28 @@ export default function MapApp() {
     }
   }
 
+  function toggleIntelligenceSparkle() {
+    setIntelligenceVariant((v) => {
+      if (v !== "none") {
+        setIntelligenceMenuOpen(false);
+        return "none";
+      }
+      setMode("browse");
+      return lastIntelligenceVariantRef.current;
+    });
+  }
+
+  function selectIntelligenceVariant(next: IntelligenceVariant) {
+    setIntelligenceMenuOpen(false);
+    if (next === "none") {
+      setIntelligenceVariant("none");
+      return;
+    }
+    lastIntelligenceVariantRef.current = next;
+    setMode("browse");
+    setIntelligenceVariant(next);
+  }
+
   function handleTrackToggle() {
     if (isTracking) {
       stopTracking();
@@ -659,6 +710,8 @@ export default function MapApp() {
         recenterTrackerAt={trackerRecenterAt}
         currentLocation={currentLocation}
         onDebugLocation={applyLocation}
+        intelligenceVariant={intelligenceVariant}
+        cellMetricsRes9={cellMetricsRes9}
       />
 
       <StatsPanel
@@ -718,15 +771,126 @@ export default function MapApp() {
         </div>
       )}
 
-      <DrawControls
-        mode={mode}
-        onModeChange={setMode}
-        undoStack={undoStack}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
-        onUploadPhoto={() => setGeoUploadOpen(true)}
-        drawUnlocked={drawUnlocked}
-      />
+      <div
+        style={{
+          position: "absolute",
+          bottom: 24,
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 12,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        {intelligenceVariant !== "none" && (
+          <>
+            <button
+              type="button"
+              onClick={() => setIntelligenceMenuOpen((o) => !o)}
+              style={{
+                padding: "6px 14px",
+                borderRadius: 999,
+                border: "1px solid var(--color-border)",
+                background: "var(--color-surface)",
+                color: "var(--color-text)",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                boxShadow: "0 2px 10px rgba(0,0,0,0.08)",
+                touchAction: "manipulation",
+                maxWidth: "min(90vw, 280px)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {INTELLIGENCE_LABELS[intelligenceVariant]} ▾
+            </button>
+            {intelligenceMenuOpen && (
+              <>
+                <div
+                  role="presentation"
+                  onClick={() => setIntelligenceMenuOpen(false)}
+                  style={{
+                    position: "fixed",
+                    inset: 0,
+                    zIndex: 11,
+                    background: "transparent",
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: "100%",
+                    marginBottom: 6,
+                    minWidth: 200,
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 12,
+                    boxShadow: "0 8px 28px rgba(0,0,0,0.15)",
+                    overflow: "hidden",
+                    zIndex: 13,
+                  }}
+                >
+                  {(["lastBeen", "mostBeen", "firstVisitAge"] as const).map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => selectIntelligenceVariant(key)}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "10px 14px",
+                        border: "none",
+                        background: intelligenceVariant === key ? "var(--color-teal)" : "transparent",
+                        color: "var(--color-text)",
+                        fontSize: 14,
+                        cursor: "pointer",
+                        touchAction: "manipulation",
+                      }}
+                    >
+                      {INTELLIGENCE_LABELS[key]}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => selectIntelligenceVariant("none")}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "10px 14px",
+                      border: "none",
+                      borderTop: "1px solid var(--color-border)",
+                      background: "transparent",
+                      color: "var(--color-text-muted)",
+                      fontSize: 13,
+                      cursor: "pointer",
+                      touchAction: "manipulation",
+                    }}
+                  >
+                    Turn off Intelligence
+                  </button>
+                </div>
+              </>
+            )}
+          </>
+        )}
+        <DrawControls
+          mode={mode}
+          onModeChange={setMode}
+          undoStack={undoStack}
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          onUploadPhoto={() => setGeoUploadOpen(true)}
+          drawUnlocked={drawUnlocked}
+          intelligenceActive={intelligenceVariant !== "none"}
+          onToggleIntelligence={toggleIntelligenceSparkle}
+        />
+      </div>
 
       {selectedPhoto && (
         <PolaroidPin

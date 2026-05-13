@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import type { MapMode } from "./MapApp";
 import type { UndoRedoStack } from "@/lib/undoRedo";
-import { MousePointer, Camera, Pencil, Eraser } from "lucide-react";
+import { MousePointer, Camera, Pencil, Eraser, Sparkles } from "lucide-react";
 
 interface Props {
   mode: MapMode;
@@ -14,6 +14,9 @@ interface Props {
   onUploadPhoto: () => void;
   /** When true, show draw + erase buttons (unlocked after location denial) */
   drawUnlocked?: boolean;
+  /** Intelligence map overlay mode */
+  intelligenceActive?: boolean;
+  onToggleIntelligence?: () => void;
 }
 
 const btn = (active: boolean): React.CSSProperties => ({
@@ -46,6 +49,8 @@ export default function DrawControls({
   onRedo,
   onUploadPhoto,
   drawUnlocked = false,
+  intelligenceActive = false,
+  onToggleIntelligence,
 }: Props) {
   const cameraActive = mode === "pin";
 
@@ -72,10 +77,7 @@ export default function DrawControls({
   return (
     <div
       style={{
-        position: "absolute",
-        bottom: 24,
-        left: "50%",
-        transform: "translateX(-50%)",
+        position: "relative",
         display: "flex",
         alignItems: "center",
         gap: 4,
@@ -152,6 +154,17 @@ export default function DrawControls({
           </div>
         )}
       </div>
+
+      {divider}
+
+      <button
+        type="button"
+        onClick={() => onToggleIntelligence?.()}
+        title="Intelligence overlays"
+        style={btn(intelligenceActive)}
+      >
+        <Sparkles size={20} />
+      </button>
     </div>
   );
 }

@@ -10,6 +10,7 @@ export interface Database {
           h3_index: string;
           first_visited_at: string;
           last_visited_at: string;
+          visit_count: number;
         };
         Insert: {
           id?: string;
@@ -17,9 +18,11 @@ export interface Database {
           h3_index: string;
           first_visited_at?: string;
           last_visited_at?: string;
+          visit_count?: number;
         };
         Update: {
           last_visited_at?: string;
+          visit_count?: number;
         };
         Relationships: [];
       };

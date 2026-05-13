@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase-server";
-import { getParentCell, resolutionForZoom } from "@/lib/h3";
+import { resolutionForZoom } from "@/lib/h3";
+import { aggregateVisitRows, type VisitMetricRow } from "@/lib/cell-metrics";
+import { applyVisitCellsBatch } from "@/lib/visit-cells-batch";
 
 /**
  * GET /api/cells?zoom=<n>
- * Returns all visited cells for the current user, coarsened to the
- * appropriate H3 resolution for the given zoom level.
+ * Returns visited cells for the current user at the H3 resolution for zoom,
+ * plus optional intelligence metrics per displayed cell.
  */
 export async function GET(request: NextRequest) {
   const supabase = await createServerClient();
@@ -15,36 +17,47 @@ export async function GET(request: NextRequest) {
   const zoom = Number(request.nextUrl.searchParams.get("zoom") ?? "13");
   const renderResolution = resolutionForZoom(zoom);
 
-  const [{ data, error }, { data: recentData }] = await Promise.all([
-    supabase.from("visit_cells").select("h3_index").eq("user_id", user.id),
+  const [rowsRes, recentRes] = await Promise.all([
+    supabase
+      .from("visit_cells")
+      .select("h3_index, first_visited_at, last_visited_at, visit_count")
+      .eq("user_id", user.id),
     supabase
       .from("visit_cells")
       .select("h3_index")
       .eq("user_id", user.id)
       .order("last_visited_at", { ascending: false })
       .limit(1)
-      .single(),
+      .maybeSingle(),
   ]);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (rowsRes.error) {
+    return NextResponse.json({ error: rowsRes.error.message }, { status: 500 });
+  }
+  if (recentRes.error) {
+    return NextResponse.json({ error: recentRes.error.message }, { status: 500 });
+  }
 
-  // Derive parent cells if rendering at coarser resolution
-  const cells =
-    renderResolution === 9
-      ? (data ?? []).map((r) => r.h3_index)
-      : [...new Set((data ?? []).map((r) => getParentCell(r.h3_index, renderResolution)))];
+  const data = rowsRes.data;
+  const recentData = recentRes.data;
+  const rawRows = (data ?? []) as VisitMetricRow[];
+  const aggregated = aggregateVisitRows(rawRows, renderResolution);
+  const cells = aggregated.map((r) => r.h3_index);
 
   return NextResponse.json({
     cells,
     resolution: renderResolution,
     recentCell: recentData?.h3_index ?? null,
+    cellMetrics: aggregated,
   });
 }
 
 /**
  * POST /api/cells
  * Body: { cells: string[] }
- * Upserts a batch of H3 res-9 cell indexes as visited.
+ * Records visits: visit_count increments only when the cell differs from the user's
+ * current most-recent last_visited_at cell; revisits to that cell refresh last_visited_at only.
+ * Implemented in Node (see lib/visit-cells-batch) — migrations stay table-only.
  */
 export async function POST(request: NextRequest) {
   const supabase = await createServerClient();
@@ -57,23 +70,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No cells provided" }, { status: 400 });
   }
 
-  const now = new Date().toISOString();
-  const rows = cells.map((h3_index) => ({
-    user_id: user.id,
-    h3_index,
-    first_visited_at: now,
-    last_visited_at: now,
-  }));
+  const seen = new Set<string>();
+  const unique = cells.filter((c) => {
+    if (seen.has(c)) return false;
+    seen.add(c);
+    return true;
+  });
 
-  const { error } = await supabase
-    .from("visit_cells")
-    .upsert(rows, {
-      onConflict: "user_id,h3_index",
-      ignoreDuplicates: false,
-    });
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, count: cells.length });
+  const result = await applyVisitCellsBatch(supabase, user.id, unique);
+  if (!result.ok) {
+    return NextResponse.json({ error: result.message }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, count: unique.length });
 }
 
 /**

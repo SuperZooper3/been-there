@@ -15,7 +15,7 @@ Been There is a map-based memory app where you color in real-world areas you've 
 - **Photo pins** — drop polaroid-style photo memories anywhere on the map with an optional caption
 - **EXIF-aware uploads** — photos with GPS metadata place themselves automatically; others can be placed manually
 - **Photo clusters** — nearby pins cluster at low zoom and expand as you zoom in
-- **Live stats** — cell count and photo count always visible in the top bar
+- **Intelligence** — sparkle toggle on the bottom bar: recency (last been), visit frequency (most been), and first-visit age overlays on explored cells
 - **PWA** — installable on iOS and Android with full offline support, home-screen icon, and splash screen
 
 ---
@@ -56,9 +56,12 @@ NEXT_PUBLIC_SITE_URL=https://your-domain.com
 
 `NEXT_PUBLIC_SITE_URL` is used to generate absolute Open Graph URLs for link previews. Stadia Maps authenticates browser apps by domain — no API key required; it works automatically on localhost and in production.
 
-### 4. Run the database migration
+### 4. Run the database migrations
 
-In the Supabase dashboard, go to **SQL Editor**, paste the contents of [`supabase/migrations/001_initial.sql`](supabase/migrations/001_initial.sql), and click **Run**. This creates the `visit_cells` and `place_photos` tables with row-level security.
+In the Supabase dashboard, go to **SQL Editor**, paste and run in order:
+
+1. [`supabase/migrations/001_initial.sql`](supabase/migrations/001_initial.sql) — creates `visit_cells` and `place_photos` with row-level security (tables + policies + grants only).
+2. [`supabase/migrations/002_visit_count.sql`](supabase/migrations/002_visit_count.sql) — adds `visit_count` to `visit_cells` (and drops the legacy `upsert_visit_cells_batch` function if it ever existed). Visit batch behaviour is implemented in Next.js: [`lib/visit-cells-batch.ts`](lib/visit-cells-batch.ts) and [`app/api/cells/route.ts`](app/api/cells/route.ts).
 
 ### 5. Run locally
 
@@ -123,6 +126,7 @@ visit_cells
   h3_index         text  (H3 resolution 9)
   first_visited_at timestamptz
   last_visited_at  timestamptz
+  visit_count      int   (visit semantics from POST /api/cells)
   unique (user_id, h3_index)
 
 place_photos

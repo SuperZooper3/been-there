@@ -8,6 +8,8 @@ import type { GeoJSONSource, MapMouseEvent, MapTouchEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import Supercluster from "supercluster";
 import { getCellBoundary, getParentCell, snapToCell, resolutionForZoom, DRAW_RESOLUTION } from "@/lib/h3";
+import { aggregateVisitRows, type VisitMetricRow } from "@/lib/cell-metrics";
+import type { IntelligenceVariant } from "@/lib/intelligence";
 import type { MapMode } from "./MapApp";
 
 const STADIA_STYLE =
@@ -28,6 +30,9 @@ interface Props {
   currentLocation?: { lat: number; lng: number } | null;
   /** Debug: K+click on the map fires this with the clicked lat/lng as a fake location ping. */
   onDebugLocation?: (lat: number, lng: number) => void;
+  intelligenceVariant?: IntelligenceVariant;
+  /** Full res-9 metrics from API — Map aggregates to the current H3 render resolution */
+  cellMetricsRes9?: VisitMetricRow[];
 }
 
 export interface PhotoPin {
@@ -45,6 +50,60 @@ const CELL_BORDER_LAYER = "visited-cells-border";
 const DESAT_SOURCE = "desaturation-source";
 const DESAT_LAYER = "desaturation-layer";
 
+function applyIntelligenceLayerPaint(
+  map: maplibregl.Map,
+  variant: IntelligenceVariant
+) {
+  if (!map.getLayer(CELL_LAYER)) return;
+  if (variant === "none") {
+    map.setPaintProperty(CELL_LAYER, "fill-color", "rgba(0,0,0,0)");
+    map.setPaintProperty(CELL_LAYER, "fill-opacity", 0);
+    return;
+  }
+  if (variant === "lastBeen") {
+    map.setPaintProperty(CELL_LAYER, "fill-color", [
+      "interpolate",
+      ["linear"],
+      ["get", "intelNorm"],
+      0,
+      "#2d1b69",
+      0.5,
+      "#b83280",
+      1,
+      "#ffc857",
+    ]);
+    map.setPaintProperty(CELL_LAYER, "fill-opacity", 0.52);
+    return;
+  }
+  if (variant === "mostBeen") {
+    map.setPaintProperty(CELL_LAYER, "fill-color", [
+      "interpolate",
+      ["linear"],
+      ["get", "intelNorm"],
+      0,
+      "#0d1f2d",
+      0.5,
+      "#2a6f97",
+      1,
+      "#7ee0ff",
+    ]);
+    map.setPaintProperty(CELL_LAYER, "fill-opacity", 0.52);
+    return;
+  }
+  map.setPaintProperty(CELL_LAYER, "fill-color", [
+    "interpolate",
+    ["linear"],
+    ["get", "intelNorm"],
+    0,
+    "#e8f4fc",
+    0.45,
+    "#b45309",
+    1,
+    "#3f1d0d",
+  ]);
+  map.setPaintProperty(CELL_LAYER, "fill-opacity", 0.5);
+}
+
 // ---------------------------------------------------------------------------
 // Pure GeoJSON helpers — defined at module level so they have no closure
 // dependencies and can be called directly from event handlers without going
@@ -58,7 +117,80 @@ function computeDisplayCells(cells: Set<string>, resolution: number): string[] {
   return [...cells];
 }
 
-function makeCellGeoJSON(displayCells: string[]): GeoJSON.FeatureCollection {
+function buildCellFeatures(
+  displayCells: string[],
+  variant: IntelligenceVariant,
+  cellMetricsRes9: VisitMetricRow[],
+  internalRes: number
+): GeoJSON.FeatureCollection {
+  const agg = aggregateVisitRows(cellMetricsRes9, internalRes);
+  const lookup = new globalThis.Map(agg.map((r) => [r.h3_index, r] as [string, VisitMetricRow]));
+  const present = displayCells
+    .map((id) => lookup.get(id))
+    .filter((x): x is VisitMetricRow => !!x);
+
+  const norms = new globalThis.Map<string, number>();
+  if (variant === "none" || present.length === 0) {
+    for (const id of displayCells) norms.set(id, 0);
+  } else {
+    const now = Date.now();
+    if (variant === "lastBeen") {
+      const ts = present.map((p) => +new Date(p.last_visited_at).getTime());
+      const min = Math.min(...ts);
+      const max = Math.max(...ts);
+      if (min === max) {
+        for (const id of displayCells) {
+          norms.set(id, lookup.get(id) ? 1 : 0);
+        }
+      } else {
+        const den = max - min;
+        for (const id of displayCells) {
+          const r = lookup.get(id);
+          norms.set(
+            id,
+            r ? (+new Date(r.last_visited_at).getTime() - min) / den : 0
+          );
+        }
+      }
+    } else if (variant === "mostBeen") {
+      const logs = present.map((p) => Math.log10(1 + p.visit_count));
+      const min = Math.min(...logs);
+      const max = Math.max(...logs);
+      if (min === max) {
+        for (const id of displayCells) {
+          norms.set(id, lookup.get(id) ? 1 : 0);
+        }
+      } else {
+        const den = max - min;
+        for (const id of displayCells) {
+          const r = lookup.get(id);
+          norms.set(
+            id,
+            r ? (Math.log10(1 + r.visit_count) - min) / den : 0
+          );
+        }
+      }
+    } else {
+      const stals = present.map(
+        (p) => now - +new Date(p.first_visited_at).getTime()
+      );
+      const minS = Math.min(...stals);
+      const maxS = Math.max(...stals);
+      if (minS === maxS) {
+        for (const id of displayCells) {
+          norms.set(id, lookup.get(id) ? 1 : 0);
+        }
+      } else {
+        const denS = maxS - minS;
+        for (const id of displayCells) {
+          const r = lookup.get(id);
+          const s = r ? now - +new Date(r.first_visited_at).getTime() : minS;
+          norms.set(id, (s - minS) / denS);
+        }
+      }
+    }
+  }
+
   return {
     type: "FeatureCollection",
     features: displayCells.map((h3Index) => {
@@ -69,7 +201,10 @@ function makeCellGeoJSON(displayCells: string[]): GeoJSON.FeatureCollection {
           type: "Polygon",
           coordinates: [[...boundary, boundary[0]]],
         },
-        properties: { h3Index },
+        properties: {
+          h3Index,
+          intelNorm: norms.get(h3Index) ?? 0,
+        },
       };
     }),
   };
@@ -101,6 +236,8 @@ export default function Map({
   recenterTrackerAt,
   currentLocation,
   onDebugLocation,
+  intelligenceVariant = "none",
+  cellMetricsRes9 = [],
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -121,6 +258,10 @@ export default function Map({
   // ---------------------------------------------------------------------------
   const visitedCellsRef = useRef<Set<string>>(visitedCells);
   const internalResRef = useRef<number>(resolutionForZoom(13));
+  const intelligenceVariantRef = useRef<IntelligenceVariant>("none");
+  const cellMetricsRes9Ref = useRef<VisitMetricRow[]>([]);
+  intelligenceVariantRef.current = intelligenceVariant;
+  cellMetricsRes9Ref.current = cellMetricsRes9;
 
   // The source-update function is stored in a ref so that event handlers
   // registered once (during map init) always call the latest version.
@@ -135,7 +276,14 @@ export default function Map({
     // yet, bail — the 'load' handler will call this again once ready.
     if (!cellSource || !desatSource) return;
     const dc = computeDisplayCells(visitedCellsRef.current, internalResRef.current);
-    cellSource.setData(makeCellGeoJSON(dc));
+    cellSource.setData(
+      buildCellFeatures(
+        dc,
+        intelligenceVariantRef.current,
+        cellMetricsRes9Ref.current,
+        internalResRef.current
+      )
+    );
     desatSource.setData(makeDesatMask(dc));
   };
 
@@ -145,7 +293,7 @@ export default function Map({
   useEffect(() => {
     visitedCellsRef.current = visitedCells;
     updateSourcesRef.current();
-  }, [visitedCells]);
+  }, [visitedCells, intelligenceVariant, cellMetricsRes9]);
 
   // ---------------------------------------------------------------------------
   // Map initialisation (runs once)
@@ -199,7 +347,10 @@ export default function Map({
         paint: { "fill-color": "#808080", "fill-opacity": 0.75 },
       });
 
-      map.addSource(CELL_SOURCE, { type: "geojson", data: makeCellGeoJSON([]) });
+      map.addSource(CELL_SOURCE, {
+        type: "geojson",
+        data: buildCellFeatures([], "none", [], internalResRef.current),
+      });
       map.addLayer({
         id: CELL_LAYER, type: "fill", source: CELL_SOURCE,
         paint: { "fill-color": "rgba(0,0,0,0)", "fill-opacity": 0 },
@@ -212,6 +363,7 @@ export default function Map({
       // Push whatever cells are already in the ref (handles the case where
       // the API response arrived before the map finished loading).
       updateSourcesRef.current();
+      applyIntelligenceLayerPaint(map, intelligenceVariantRef.current);
     });
 
     mapRef.current = map;
@@ -436,7 +588,7 @@ export default function Map({
           .setLngLat([photo.lng, photo.lat]).addTo(map);
       }
     });
-  }, []); // eslint-disable-line
+  }, []);
 
   useEffect(() => { renderMarkersRef.current = renderMarkers; }, [renderMarkers]);
 
@@ -483,6 +635,12 @@ export default function Map({
     clusterIndexRef.current = index;
     renderMarkers();
   }, [photos, renderMarkers]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map?.isStyleLoaded()) return;
+    applyIntelligenceLayerPaint(map, intelligenceVariant);
+  }, [intelligenceVariant, visitedCells, cellMetricsRes9]);
 
   return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
 }

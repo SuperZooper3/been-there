@@ -26,12 +26,13 @@ That's it — no OAuth credentials needed.
 
 ---
 
-## 3. Run the database migration
+## 3. Run the database migrations
 
 1. In the Supabase dashboard, go to **SQL Editor**.
 2. Open `supabase/migrations/001_initial.sql` from this repo.
 3. Paste the full contents and click **Run**.
 4. Confirm no errors appear and that `visit_cells` and `place_photos` show up under **Table Editor**.
+5. Run `supabase/migrations/002_visit_count.sql` the same way (adds `visit_count`; includes a no-op `DROP FUNCTION` if a draft RPC ever existed). Visit batch behaviour lives in the Next.js API (`POST /api/cells`, `lib/visit-cells-batch.ts`), not in Postgres functions — migrations stay table-only like `001`.
 
 ---
 
