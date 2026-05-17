@@ -674,12 +674,8 @@ export default function MapApp() {
     });
   }
 
-  function selectIntelligenceVariant(next: IntelligenceVariant) {
+  function selectIntelligenceVariant(next: Exclude<IntelligenceVariant, "none">) {
     setIntelligenceMenuOpen(false);
-    if (next === "none") {
-      setIntelligenceVariant("none");
-      return;
-    }
     lastIntelligenceVariantRef.current = next;
     setMode("browse");
     setIntelligenceVariant(next);
@@ -950,25 +946,6 @@ export default function MapApp() {
                       {INTELLIGENCE_LABELS[key]}
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    onClick={() => selectIntelligenceVariant("none")}
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      textAlign: "left",
-                      padding: "10px 14px",
-                      border: "none",
-                      borderTop: "1px solid var(--color-border)",
-                      background: "transparent",
-                      color: "var(--color-text-muted)",
-                      fontSize: 13,
-                      cursor: "pointer",
-                      touchAction: "manipulation",
-                    }}
-                  >
-                    Turn off Intelligence
-                  </button>
                 </div>
               </>
             )}
