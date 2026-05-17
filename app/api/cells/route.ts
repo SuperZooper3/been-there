@@ -4,6 +4,9 @@ import { resolutionForZoom } from "@/lib/h3";
 import { aggregateVisitRows, type VisitMetricRow } from "@/lib/cell-metrics";
 import { applyVisitCellsBatch } from "@/lib/visit-cells-batch";
 
+/** Matches PostgREST default max rows; fetch in pages so we return the full set in one response. */
+const VISIT_CELLS_PAGE_SIZE = 1000;
+
 /**
  * GET /api/cells?zoom=<n>
  * Returns visited cells for the current user at the H3 resolution for zoom,
@@ -17,11 +20,27 @@ export async function GET(request: NextRequest) {
   const zoom = Number(request.nextUrl.searchParams.get("zoom") ?? "13");
   const renderResolution = resolutionForZoom(zoom);
 
+  const fetchAllRows = async () => {
+    const all: VisitMetricRow[] = [];
+    let offset = 0;
+    for (;;) {
+      const { data, error } = await supabase
+        .from("visit_cells")
+        .select("h3_index, first_visited_at, last_visited_at, visit_count")
+        .eq("user_id", user.id)
+        .order("id", { ascending: true })
+        .range(offset, offset + VISIT_CELLS_PAGE_SIZE - 1);
+      if (error) return { data: null as VisitMetricRow[] | null, error };
+      const page = (data ?? []) as VisitMetricRow[];
+      all.push(...page);
+      if (page.length < VISIT_CELLS_PAGE_SIZE) break;
+      offset += VISIT_CELLS_PAGE_SIZE;
+    }
+    return { data: all, error: null };
+  };
+
   const [rowsRes, recentRes] = await Promise.all([
-    supabase
-      .from("visit_cells")
-      .select("h3_index, first_visited_at, last_visited_at, visit_count")
-      .eq("user_id", user.id),
+    fetchAllRows(),
     supabase
       .from("visit_cells")
       .select("h3_index")
@@ -38,7 +57,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: recentRes.error.message }, { status: 500 });
   }
 
-  const rawRows = (rowsRes.data ?? []) as VisitMetricRow[];
+  const rawRows = rowsRes.data ?? [];
   const recentData = recentRes.data;
   const aggregated = aggregateVisitRows(rawRows, renderResolution);
   const cells = aggregated.map((r) => r.h3_index);
