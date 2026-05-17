@@ -34,6 +34,7 @@ import {
   getSealedBatches,
   removeSealedBatch,
   getPendingCellsFromBatches,
+  getLatestPaintCell,
   migrateLegacyQueuesIfNeeded,
   countUnsyncedEvents,
 } from "@/lib/visit-batch-log";
@@ -51,6 +52,31 @@ const NATIVE_DISTANCE_FILTER_M = 48;
 const NATIVE_TRACK_FLUSH_MS = 10 * 60 * 1000;
 
 export type MapMode = "browse" | "draw" | "erase" | "pin";
+
+function resolveInitialCenter(
+  recentCell: string | null,
+  metrics: VisitMetricRow[],
+  localLatest: { h3: string; t: string } | null
+): { lat: number; lng: number } | null {
+  let bestH3: string | null = recentCell;
+  let bestMs = 0;
+  if (recentCell) {
+    const row = metrics.find((r) => r.h3_index === recentCell);
+    if (row) bestMs = Date.parse(row.last_visited_at);
+  }
+  for (const row of metrics) {
+    const ms = Date.parse(row.last_visited_at);
+    if (!Number.isNaN(ms) && ms > bestMs) {
+      bestMs = ms;
+      bestH3 = row.h3_index;
+    }
+  }
+  if (localLatest) {
+    const ms = Date.parse(localLatest.t);
+    if (!Number.isNaN(ms) && ms > bestMs) bestH3 = localLatest.h3;
+  }
+  return bestH3 ? cellToCenter(bestH3) : null;
+}
 
 export default function MapApp() {
   // Map state
@@ -103,6 +129,7 @@ export default function MapApp() {
   /** Set true when tracking starts; first `applyLocation` consumes it to recenter the map on the tracker pin */
   const shouldRecenterMapOnTrackerFixRef = useRef(false);
   const [trackerRecenterAt, setTrackerRecenterAt] = useState<{ lat: number; lng: number; seq: number } | null>(null);
+  const [followTracker, setFollowTracker] = useState(false);
   // Native background geolocation watcher ID — kept in ref so stopTracking can remove it
   const nativeWatcherIdRef = useRef<string | null>(null);
   // Stable ref to applyLocation — updated every render so the native plugin callback
@@ -167,12 +194,19 @@ export default function MapApp() {
           for (const c of batchPending.erases) merged.delete(c);
           for (const c of batchPending.paints) merged.add(c);
           setVisitedCells(merged);
-          if (cellsData.recentCell) {
-            setInitialCenter(cellToCenter(cellsData.recentCell));
+          const metrics = Array.isArray(cellsData.cellMetrics)
+            ? (cellsData.cellMetrics as VisitMetricRow[])
+            : [];
+          if (metrics.length > 0) {
+            setCellMetricsRes9(metrics);
           }
-          if (Array.isArray(cellsData.cellMetrics)) {
-            setCellMetricsRes9(cellsData.cellMetrics as VisitMetricRow[]);
-          }
+          const localLatest = await getLatestPaintCell();
+          const initial = resolveInitialCenter(
+            (cellsData.recentCell as string | null) ?? null,
+            metrics,
+            localLatest
+          );
+          if (initial) setInitialCenter(initial);
         }
         if (!photosData.error && photosData.photos) {
           setPhotos(photosData.photos);
@@ -611,6 +645,7 @@ export default function MapApp() {
         );
         nativeWatcherIdRef.current = watcherId;
         shouldRecenterMapOnTrackerFixRef.current = true;
+        setFollowTracker(true);
         setIsTracking(true);
         setTrackingDenied(false);
         setLastNativeGpsAtMs(null);
@@ -629,6 +664,7 @@ export default function MapApp() {
       // Web path — unchanged
       if (!navigator.geolocation) { setTrackingDenied(true); return; }
       shouldRecenterMapOnTrackerFixRef.current = true;
+      setFollowTracker(true);
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           applyLocation(pos.coords.latitude, pos.coords.longitude);
@@ -681,6 +717,20 @@ export default function MapApp() {
     setIntelligenceVariant(next);
   }
 
+  function toggleFollowTracker() {
+    setFollowTracker((prev) => {
+      if (prev) return false;
+      if (currentLocation) {
+        setTrackerRecenterAt((r) => ({
+          lat: currentLocation.lat,
+          lng: currentLocation.lng,
+          seq: (r?.seq ?? 0) + 1,
+        }));
+      }
+      return true;
+    });
+  }
+
   async function handleTrackToggle() {
     if (isTracking) {
       stopTracking();
@@ -705,6 +755,7 @@ export default function MapApp() {
       setTrackingBackgroundLimited(false);
     }
     setIsTracking(false);
+    setFollowTracker(false);
     shouldRecenterMapOnTrackerFixRef.current = false;
     setCurrentLocation(null);
     setTrackingProgress(0);
@@ -798,6 +849,8 @@ export default function MapApp() {
         onZoomChange={setZoom}
         centerOn={initialCenter}
         recenterTrackerAt={trackerRecenterAt}
+        followTracker={followTracker}
+        onFollowTrackerChange={setFollowTracker}
         currentLocation={currentLocation}
         onDebugLocation={applyLocation}
         intelligenceVariant={intelligenceVariant}
@@ -961,6 +1014,9 @@ export default function MapApp() {
           drawUnlocked={drawUnlocked}
           intelligenceActive={intelligenceVariant !== "none"}
           onToggleIntelligence={toggleIntelligenceSparkle}
+          isTracking={isTracking}
+          followTracker={followTracker}
+          onToggleFollowTracker={toggleFollowTracker}
         />
       </div>
 

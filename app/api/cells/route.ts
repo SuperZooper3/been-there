@@ -38,16 +38,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: recentRes.error.message }, { status: 500 });
   }
 
-  const data = rowsRes.data;
+  const rawRows = (rowsRes.data ?? []) as VisitMetricRow[];
   const recentData = recentRes.data;
-  const rawRows = (data ?? []) as VisitMetricRow[];
   const aggregated = aggregateVisitRows(rawRows, renderResolution);
   const cells = aggregated.map((r) => r.h3_index);
+
+  let recentCell = recentData?.h3_index ?? null;
+  if (!recentCell && rawRows.length > 0) {
+    let best = rawRows[0];
+    for (const row of rawRows) {
+      if (row.last_visited_at > best.last_visited_at) best = row;
+    }
+    recentCell = best.h3_index;
+  }
 
   return NextResponse.json({
     cells,
     resolution: renderResolution,
-    recentCell: recentData?.h3_index ?? null,
+    recentCell,
     cellMetrics: aggregated,
   });
 }

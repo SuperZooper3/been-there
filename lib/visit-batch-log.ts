@@ -136,6 +136,21 @@ export async function countUnsyncedEvents(): Promise<number> {
   return open.events.length + sealed.reduce((n, b) => n + b.events.length, 0);
 }
 
+/** Most recent local paint event (open + sealed batches), if any. */
+export async function getLatestPaintCell(): Promise<{ h3: string; t: string } | null> {
+  const open = await readOpenBatch();
+  const sealed = await readSealedBatches();
+  const paints = [...sealed.flatMap((b) => b.events), ...open.events].filter(
+    (ev): ev is Extract<VisitEvent, { op: "paint" }> => ev.op === "paint"
+  );
+  if (paints.length === 0) return null;
+  let best = paints[0];
+  for (const ev of paints) {
+    if (Date.parse(ev.t) > Date.parse(best.t)) best = ev;
+  }
+  return { h3: best.h3, t: best.t };
+}
+
 /** One-time: legacy paint cells → sealed batch (RPC); legacy erases stay for DELETE /api/cells. */
 export async function migrateLegacyQueuesToBatch(paintCells: string[]): Promise<void> {
   const flag = await getOfflineStorageItem(LEGACY_MIGRATED_KEY);

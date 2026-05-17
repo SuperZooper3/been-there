@@ -12,11 +12,37 @@ interface Props {
   onUndo: () => void;
   onRedo: () => void;
   onUploadPhoto: () => void;
-  /** When true, show draw + erase buttons (unlocked after location denial) */
   drawUnlocked?: boolean;
-  /** Intelligence map overlay mode */
   intelligenceActive?: boolean;
   onToggleIntelligence?: () => void;
+  isTracking?: boolean;
+  followTracker?: boolean;
+  onToggleFollowTracker?: () => void;
+}
+
+function TrackerFollowIcon() {
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: 14,
+        height: 14,
+        flexShrink: 0,
+      }}
+    >
+      <div className="location-pulse-ring" style={{ position: "absolute", inset: 0 }} />
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          borderRadius: "50%",
+          background: "#3b82f6",
+          border: "2px solid white",
+          boxShadow: "0 1px 6px rgba(59, 130, 246, 0.5)",
+        }}
+      />
+    </div>
+  );
 }
 
 const btn = (active: boolean): React.CSSProperties => ({
@@ -51,6 +77,9 @@ export default function DrawControls({
   drawUnlocked = false,
   intelligenceActive = false,
   onToggleIntelligence,
+  isTracking = false,
+  followTracker = false,
+  onToggleFollowTracker,
 }: Props) {
   const cameraActive = mode === "pin";
 
@@ -90,7 +119,20 @@ export default function DrawControls({
         userSelect: "none",
       }}
     >
-      {/* Browse / pan — also active during draw/erase so it looks like a "base" state */}
+      {isTracking && (
+        <>
+          <button
+            type="button"
+            onClick={() => onToggleFollowTracker?.()}
+            title={followTracker ? "Stop following location" : "Follow location"}
+            style={btn(followTracker)}
+          >
+            <TrackerFollowIcon />
+          </button>
+          {divider}
+        </>
+      )}
+
       <button
         onClick={() => onModeChange("browse")}
         title="Pan map (H)"
@@ -101,7 +143,6 @@ export default function DrawControls({
         <MousePointer size={20} />
       </button>
 
-      {/* Draw + Erase — only visible after the user unlocks manual drawing */}
       {drawUnlocked && (
         <>
           {divider}
@@ -124,7 +165,6 @@ export default function DrawControls({
 
       {divider}
 
-      {/* Camera / photo upload */}
       <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
         <button
           onClick={onUploadPhoto}

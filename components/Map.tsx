@@ -27,6 +27,10 @@ interface Props {
   centerOn?: { lat: number; lng: number } | null;
   /** Increment `seq` to ease the map to this point at the default street zoom (13). */
   recenterTrackerAt?: { lat: number; lng: number; seq: number } | null;
+  /** When true, pan the map to follow `currentLocation` as it updates. */
+  followTracker?: boolean;
+  /** User panned the map — turn off follow mode. */
+  onFollowTrackerChange?: (follow: boolean) => void;
   currentLocation?: { lat: number; lng: number } | null;
   /** Debug: K+click on the map fires this with the clicked lat/lng as a fake location ping. */
   onDebugLocation?: (lat: number, lng: number) => void;
@@ -320,6 +324,8 @@ export default function Map({
   onZoomChange,
   centerOn,
   recenterTrackerAt,
+  followTracker = false,
+  onFollowTrackerChange,
   currentLocation,
   onDebugLocation,
   intelligenceVariant = "none",
@@ -336,7 +342,12 @@ export default function Map({
   const photosMapRef = useRef<Record<string, PhotoPin>>({});
   const rotationRef = useRef<Record<string, number>>({});
   const onPinClickRef = useRef(onPinClick);
+  const onFollowTrackerChangeRef = useRef(onFollowTrackerChange);
+  onFollowTrackerChangeRef.current = onFollowTrackerChange;
   const renderMarkersRef = useRef<() => void>(() => {});
+  const centerOnRef = useRef(centerOn);
+  centerOnRef.current = centerOn;
+  const hasInitialCenteredRef = useRef(false);
 
   // ---------------------------------------------------------------------------
   // Always-current refs for visitedCells and the current H3 render resolution.
@@ -425,6 +436,10 @@ export default function Map({
       renderMarkersRef.current();
     });
 
+    map.on("dragstart", () => {
+      onFollowTrackerChangeRef.current?.(false);
+    });
+
     map.on("load", () => {
       map.getCanvas().style.filter = "saturate(2.5) contrast(1.15)";
 
@@ -453,6 +468,12 @@ export default function Map({
       // the API response arrived before the map finished loading).
       // applyIntelligenceLayerPaint is called inside updateSourcesRef.
       updateSourcesRef.current();
+
+      const initial = centerOnRef.current;
+      if (initial && !hasInitialCenteredRef.current) {
+        hasInitialCenteredRef.current = true;
+        map.jumpTo({ center: [initial.lng, initial.lat], zoom: 13 });
+      }
     });
 
     mapRef.current = map;
@@ -475,21 +496,33 @@ export default function Map({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Jump to the most recently visited location once (fires once after initial load)
-  const hasCenteredRef = useRef(false);
+  // Jump to the most recently visited location once (after cells load)
   useEffect(() => {
-    if (!centerOn || hasCenteredRef.current) return;
+    if (!centerOn || hasInitialCenteredRef.current) return;
     const map = mapRef.current;
     if (!map) return;
-    hasCenteredRef.current = true;
-    if (map.isStyleLoaded()) {
-      map.jumpTo({ center: [centerOn.lng, centerOn.lat] });
-    } else {
-      map.once("load", () => map.jumpTo({ center: [centerOn.lng, centerOn.lat] }));
-    }
+
+    const apply = () => {
+      const target = centerOnRef.current;
+      if (!target || hasInitialCenteredRef.current) return true;
+      if (!map.isStyleLoaded()) return false;
+      hasInitialCenteredRef.current = true;
+      map.jumpTo({ center: [target.lng, target.lat], zoom: Math.max(map.getZoom(), 13) });
+      return true;
+    };
+
+    if (apply()) return;
+
+    const onReady = () => { apply(); };
+    map.once("load", onReady);
+    map.once("idle", onReady);
+    return () => {
+      map.off("load", onReady);
+      map.off("idle", onReady);
+    };
   }, [centerOn]);
 
-  // When tracking starts, parent bumps `seq` on the first GPS fix so the user sees their pin.
+  // Recenter on tracker (first fix or toolbar follow toggle)
   useEffect(() => {
     if (!recenterTrackerAt) return;
     const map = mapRef.current;
@@ -502,6 +535,18 @@ export default function Map({
     if (map.isStyleLoaded()) run();
     else map.once("load", run);
   }, [recenterTrackerAt?.seq]);
+
+  // Smooth follow while recording location
+  useEffect(() => {
+    if (!followTracker || !currentLocation) return;
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    map.easeTo({
+      center: [currentLocation.lng, currentLocation.lat],
+      duration: 450,
+      essential: true,
+    });
+  }, [followTracker, currentLocation?.lat, currentLocation?.lng]);
 
   // Lock/unlock map pan and set canvas cursor based on mode
   useEffect(() => {
