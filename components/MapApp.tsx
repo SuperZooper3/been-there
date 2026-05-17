@@ -21,24 +21,13 @@ import PolaroidPin from "./PolaroidPin";
 import PinDropDialog from "./PinDropDialog";
 import GeoUploadDialog from "./GeoUploadDialog";
 import {
+  appendOfflinePaintQueue,
+  appendOfflineEraseQueue,
   getOfflinePaintQueue,
   getOfflineEraseQueue,
   removeFromOfflinePaintQueue,
   removeFromOfflineEraseQueue,
-  ensureOfflineBufferReady,
 } from "@/lib/offline-buffer";
-import {
-  appendPaintEvent,
-  appendEraseEvent,
-  sealOpenBatch,
-  getSealedBatches,
-  removeSealedBatch,
-  getPendingCellsFromBatches,
-  getLatestPaintCell,
-  migrateLegacyQueuesIfNeeded,
-  countUnsyncedEvents,
-} from "@/lib/visit-batch-log";
-import { isTrackingOptedOut, setTrackingOptedOut } from "@/lib/tracking-preference";
 import type { VisitMetricRow } from "@/lib/cell-metrics";
 import { INTELLIGENCE_LABELS, type IntelligenceVariant } from "@/lib/intelligence";
 
@@ -141,12 +130,7 @@ export default function MapApp() {
   const pendingEraseRef = useRef<Set<string>>(new Set());
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flushPendingRef = useRef<() => Promise<void>>(async () => {});
-  const syncAllRef = useRef<() => Promise<void>>(async () => {});
-  const persistPendingRef = useRef<() => Promise<void>>(async () => {});
-  const startTrackingRef = useRef<() => Promise<void>>(async () => {});
-  const persistPendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isFlushingRef = useRef(false);
-  const [unsyncedPendingCount, setUnsyncedPendingCount] = useState(0);
+  const syncOfflineQueuesRef = useRef<() => Promise<void>>(async () => {});
 
   // Stable refs so handleCellErase can read current values without re-creating
   const renderResolutionRef = useRef(renderResolution);
@@ -154,22 +138,10 @@ export default function MapApp() {
   const visitedCellsRef = useRef(visitedCells);
   useEffect(() => { visitedCellsRef.current = visitedCells; }, [visitedCells]);
 
-  const refreshUnsyncedCount = useCallback(async () => {
-    const [batchEvents, paints, erases] = await Promise.all([
-      countUnsyncedEvents(),
-      getOfflinePaintQueue(),
-      getOfflineEraseQueue(),
-    ]);
-    setUnsyncedPendingCount(batchEvents + paints.length + erases.length);
-  }, []);
-
-  // Initial data load — union server cells with unsynced local paints/erases
+  // Initial data load
   useEffect(() => {
     async function load() {
       try {
-        await ensureOfflineBufferReady();
-        await migrateLegacyQueuesIfNeeded();
-
         const [cellsRes, photosRes] = await Promise.all([
           fetch(`/api/cells?zoom=13`),
           fetch("/api/photos"),
@@ -183,16 +155,11 @@ export default function MapApp() {
           }
         } else if (cellsData.cells) {
           const serverSet = new Set<string>(cellsData.cells as string[]);
-          const [paints, erases, batchPending] = await Promise.all([
-            getOfflinePaintQueue(),
-            getOfflineEraseQueue(),
-            getPendingCellsFromBatches(),
-          ]);
+          const paints = getOfflinePaintQueue();
+          const erases = getOfflineEraseQueue();
           const merged = new Set(serverSet);
           for (const c of erases) merged.delete(c);
           for (const c of paints) merged.add(c);
-          for (const c of batchPending.erases) merged.delete(c);
-          for (const c of batchPending.paints) merged.add(c);
           setVisitedCells(merged);
           const metrics = Array.isArray(cellsData.cellMetrics)
             ? (cellsData.cellMetrics as VisitMetricRow[])
@@ -200,19 +167,16 @@ export default function MapApp() {
           if (metrics.length > 0) {
             setCellMetricsRes9(metrics);
           }
-          const localLatest = await getLatestPaintCell();
           const initial = resolveInitialCenter(
             (cellsData.recentCell as string | null) ?? null,
             metrics,
-            localLatest
+            null
           );
           if (initial) setInitialCenter(initial);
         }
         if (!photosData.error && photosData.photos) {
           setPhotos(photosData.photos);
         }
-        await refreshUnsyncedCount();
-        void syncAllRef.current();
       } catch (e) {
         console.error("Failed to load map data:", e);
       } finally {
@@ -220,7 +184,7 @@ export default function MapApp() {
       }
     }
     load();
-  }, [refreshUnsyncedCount]);
+  }, []);
 
   // First launch on native shell: explain notifications + battery before they hit Track.
   useEffect(() => {
@@ -244,54 +208,14 @@ export default function MapApp() {
     }
   }, []);
 
-  const persistPendingToStorage = useCallback(async () => {
-    const toPaint = [...pendingPaintRef.current];
-    const toErase = [...pendingEraseRef.current];
-    for (const c of toPaint) await appendPaintEvent(c);
-    for (const c of toErase) await appendEraseEvent(c);
-    pendingPaintRef.current.clear();
-    pendingEraseRef.current.clear();
-    await sealOpenBatch();
-    await refreshUnsyncedCount();
-  }, [refreshUnsyncedCount]);
-
-  const schedulePersistPending = useCallback(() => {
-    if (persistPendingTimerRef.current) clearTimeout(persistPendingTimerRef.current);
-    persistPendingTimerRef.current = setTimeout(() => {
-      void persistPendingRef.current();
-    }, 500);
-  }, []);
-
-  const syncVisitBatches = useCallback(async () => {
-    await sealOpenBatch();
-    const batches = await getSealedBatches();
-    for (const batch of batches) {
-      try {
-        const res = await fetch("/api/cells/sync", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            clientBatchId: batch.clientBatchId,
-            events: batch.events,
-          }),
-        });
-        if (res.ok) {
-          await removeSealedBatch(batch.clientBatchId);
-        } else {
-          break;
-        }
-      } catch {
-        break;
-      }
-    }
-    await refreshUnsyncedCount();
-  }, [refreshUnsyncedCount]);
-
-  // Legacy cell queues — erases first, then paints; only remove on ACK.
+  // Flush the localStorage offline queues to the server.
+  // Erases are sent first so a cell erased offline isn't re-added by a pending paint.
+  // We snapshot the queues once and remove only those specific cells after each fetch so that
+  // cells appended by a concurrent offline flush during the awaits are not accidentally wiped.
   const syncOfflineQueues = useCallback(async () => {
     if (isSyncingRef.current) return;
-    const toErase = await getOfflineEraseQueue();
-    const toPaint = await getOfflinePaintQueue();
+    const toErase = getOfflineEraseQueue();
+    const toPaint = getOfflinePaintQueue();
     if (toErase.length === 0 && toPaint.length === 0) return;
     isSyncingRef.current = true;
     try {
@@ -303,7 +227,7 @@ export default function MapApp() {
         });
         if (res.ok) {
           await refreshCellMetrics();
-          await removeFromOfflineEraseQueue(toErase);
+          removeFromOfflineEraseQueue(toErase);
         }
       }
       if (toPaint.length > 0) {
@@ -314,58 +238,67 @@ export default function MapApp() {
         });
         if (res.ok) {
           await refreshCellMetrics();
-          await removeFromOfflinePaintQueue(toPaint);
+          removeFromOfflinePaintQueue(toPaint);
         }
       }
     } catch {
-      /* keep queues */
+      // Leave queues intact — will retry on next reconnect or load
     } finally {
       isSyncingRef.current = false;
-      await refreshUnsyncedCount();
     }
-  }, [refreshCellMetrics, refreshUnsyncedCount]);
+  }, [refreshCellMetrics]);
 
-  const syncAll = useCallback(async () => {
-    if (isFlushingRef.current) return;
-    isFlushingRef.current = true;
-    try {
-      await persistPendingToStorage();
-      await syncVisitBatches();
-      await syncOfflineQueues();
-    } finally {
-      isFlushingRef.current = false;
-    }
-  }, [persistPendingToStorage, syncVisitBatches, syncOfflineQueues]);
+  // Attempt offline queue sync on mount and whenever the device comes back online
+  useEffect(() => {
+    syncOfflineQueues();
+    window.addEventListener("online", syncOfflineQueues);
+    return () => window.removeEventListener("online", syncOfflineQueues);
+  }, [syncOfflineQueues]);
 
+  // Flush pending cell changes to API, falling back to localStorage when offline (M1, M2)
   const flushPending = useCallback(async () => {
-    await syncAll();
-  }, [syncAll]);
+    const toPaint = [...pendingPaintRef.current];
+    const toErase = [...pendingEraseRef.current];
+    pendingPaintRef.current = new Set();
+    pendingEraseRef.current = new Set();
 
-  persistPendingRef.current = persistPendingToStorage;
+    if (!navigator.onLine) {
+      // Offline — persist to localStorage; will be flushed on reconnect
+      if (toPaint.length > 0) appendOfflinePaintQueue(toPaint);
+      if (toErase.length > 0) appendOfflineEraseQueue(toErase);
+      return;
+    }
+
+    // Erases first — same ordering rule as syncOfflineQueues
+    try {
+      if (toErase.length > 0) {
+        const res = await fetch("/api/cells", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cells: toErase }),
+        });
+        if (res.ok) await refreshCellMetrics();
+      }
+    } catch {
+      if (toErase.length > 0) appendOfflineEraseQueue(toErase);
+    }
+
+    try {
+      if (toPaint.length > 0) {
+        const res = await fetch("/api/cells", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cells: toPaint }),
+        });
+        if (res.ok) await refreshCellMetrics();
+      }
+    } catch {
+      if (toPaint.length > 0) appendOfflinePaintQueue(toPaint);
+    }
+  }, [refreshCellMetrics]);
+
   flushPendingRef.current = flushPending;
-  syncAllRef.current = syncAll;
-
-  useEffect(() => {
-    const onOnline = () => void syncAllRef.current();
-    window.addEventListener("online", onOnline);
-    return () => window.removeEventListener("online", onOnline);
-  }, []);
-
-  useEffect(() => {
-    const onHide = () => {
-      void persistPendingRef.current();
-      void sealOpenBatch();
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === "hidden") onHide();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("pagehide", onHide);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("pagehide", onHide);
-    };
-  }, []);
+  syncOfflineQueuesRef.current = syncOfflineQueues;
 
   // Native tracking: periodic server sync (cells already update the map locally).
   useEffect(() => {
@@ -382,10 +315,10 @@ export default function MapApp() {
     let cancelled = false;
     let sub: Awaited<ReturnType<typeof App.addListener>> | undefined;
     void App.addListener("appStateChange", ({ isActive }) => {
-      void persistPendingRef.current();
-      void sealOpenBatch();
-      if (!isActive) return;
-      void syncAllRef.current();
+      void flushPendingRef.current();
+      if (isActive) {
+        void syncOfflineQueuesRef.current();
+      }
     }).then((h) => {
       if (cancelled) {
         void h.remove();
@@ -431,12 +364,11 @@ export default function MapApp() {
           return pushAction(s, { type: "paint", cells: [h3Index] });
         });
       }
-      void appendPaintEvent(h3Index);
-      schedulePersistPending();
+      pendingPaintRef.current.add(h3Index);
       scheduleFlushed();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [schedulePersistPending]
+    []
   );
 
   // Erase cells. When zoomed out, erases every res-9 cell under the coarser
@@ -484,12 +416,11 @@ export default function MapApp() {
         return pushAction(s, { type: "erase", cells: cellsToErase });
       });
 
-      cellsToErase.forEach((c) => void appendEraseEvent(c));
-      schedulePersistPending();
+      cellsToErase.forEach((c) => pendingEraseRef.current.add(c));
       scheduleFlushed();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [schedulePersistPending]
+    []
   );
 
   // Undo
@@ -519,16 +450,15 @@ export default function MapApp() {
         action.cells.forEach((c) => next.delete(c));
         return next;
       });
-      action.cells.forEach((c) => void appendEraseEvent(c));
+      action.cells.forEach((c) => pendingEraseRef.current.add(c));
     } else {
       setVisitedCells((prev) => {
         const next = new Set(prev);
         action.cells.forEach((c) => next.add(c));
         return next;
       });
-      action.cells.forEach((c) => void appendPaintEvent(c));
+      action.cells.forEach((c) => pendingPaintRef.current.add(c));
     }
-    schedulePersistPending();
     scheduleFlushed();
   }
 
@@ -539,16 +469,15 @@ export default function MapApp() {
         action.cells.forEach((c) => next.add(c));
         return next;
       });
-      action.cells.forEach((c) => void appendPaintEvent(c));
+      action.cells.forEach((c) => pendingPaintRef.current.add(c));
     } else {
       setVisitedCells((prev) => {
         const next = new Set(prev);
         action.cells.forEach((c) => next.delete(c));
         return next;
       });
-      action.cells.forEach((c) => void appendEraseEvent(c));
+      action.cells.forEach((c) => pendingEraseRef.current.add(c));
     }
-    schedulePersistPending();
     scheduleFlushed();
   }
 
@@ -611,7 +540,7 @@ export default function MapApp() {
   // Keep ref current every render so the native plugin callback never holds a stale closure (M3)
   applyLocationRef.current = applyLocation;
 
-  const startTracking = useCallback(async () => {
+  async function startTracking() {
     if (Capacitor.isNativePlatform()) {
       try {
         if (Capacitor.getPlatform() === "android") {
@@ -680,24 +609,7 @@ export default function MapApp() {
         { enableHighAccuracy: true, timeout: 10_000 }
       );
     }
-  }, []);
-
-  startTrackingRef.current = startTracking;
-
-  // Default-on tracking when app opens (user can stop via Track button = opt-out).
-  useEffect(() => {
-    if (isLoading || showNativeOnboarding) return;
-    let cancelled = false;
-    void (async () => {
-      if (await isTrackingOptedOut()) return;
-      if (Capacitor.isNativePlatform() && !hasCompletedNativeOnboarding()) return;
-      if (cancelled || isTrackingRef.current) return;
-      await startTrackingRef.current();
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoading, showNativeOnboarding]);
+  }
 
   function toggleIntelligenceSparkle() {
     setIntelligenceVariant((v) => {
@@ -734,12 +646,10 @@ export default function MapApp() {
   async function handleTrackToggle() {
     if (isTracking) {
       stopTracking();
-      await setTrackingOptedOut(true);
     } else if (trackingDenied) {
       setShowDrawModal(true);
     } else {
-      await setTrackingOptedOut(false);
-      await startTracking();
+      startTracking();
     }
   }
 
@@ -869,7 +779,6 @@ export default function MapApp() {
         trackingDenied={trackingDenied}
         nativeLastGpsAtMs={Capacitor.getPlatform() === "android" ? lastNativeGpsAtMs : null}
         onNativeTipsClick={Capacitor.isNativePlatform() ? () => setShowNativeOnboarding(true) : undefined}
-        unsyncedPendingCount={unsyncedPendingCount}
       />
 
       {/* iOS background location permission warning — shown when only "When In Use" was granted.

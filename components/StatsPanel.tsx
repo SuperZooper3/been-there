@@ -20,8 +20,6 @@ interface Props {
   nativeLastGpsAtMs?: number | null;
   /** Native app: tap logo to reopen tips / permission guide */
   onNativeTipsClick?: () => void;
-  /** Unsynced visit events waiting to upload */
-  unsyncedPendingCount?: number;
 }
 
 export default function StatsPanel({
@@ -35,7 +33,6 @@ export default function StatsPanel({
   trackingDenied = false,
   nativeLastGpsAtMs = null,
   onNativeTipsClick,
-  unsyncedPendingCount = 0,
 }: Props) {
   const dashOffset = CIRC * (1 - trackingProgress / 100);
 
@@ -118,23 +115,6 @@ export default function StatsPanel({
 
         <Stat label="cells" value={cellCount.toLocaleString()} color="var(--color-teal)" isLoading={isLoading} />
         <Stat label="photos" value={photoCount.toLocaleString()} color="var(--color-pink)" isLoading={isLoading} />
-        {unsyncedPendingCount > 0 && (
-          <div
-            title="Visits saved on device — will sync when online"
-            style={{
-              fontSize: 10,
-              fontWeight: 600,
-              color: "var(--color-orange)",
-              padding: "2px 8px",
-              borderRadius: 8,
-              background: "rgba(237, 137, 54, 0.12)",
-              whiteSpace: "nowrap",
-              alignSelf: "center",
-            }}
-          >
-            {unsyncedPendingCount.toLocaleString()} unsynced
-          </div>
-        )}
       </div>
 
       {isTracking && nativeLastGpsAtMs != null && (
