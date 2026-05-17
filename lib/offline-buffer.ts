@@ -1,81 +1,93 @@
-// Offline buffer for GPS-derived cell writes.
-//
-// When the device has no network, painted and erased cells are persisted here
-// in localStorage instead of being dropped. On reconnect (or app load), the
-// queues are flushed to the server in the correct order: erases first, then
-// paints — so that a cell erased offline is not re-added by a pending paint.
-//
-// The upsert schema (onConflict: user_id,h3_index) makes repeated sends safe;
-// the server just refreshes last_visited_at on duplicate paints.
+// Offline buffer for GPS-derived cell writes (async; Preferences on native, localStorage on web).
 
-const PAINT_KEY = 'bt_offline_paint';
-const ERASE_KEY = 'bt_offline_erase';
+import {
+  getOfflineStorageItem,
+  setOfflineStorageItem,
+  removeOfflineStorageItem,
+  migrateLegacyOfflineStorage,
+} from "@/lib/offline-storage";
 
-function readQueue(key: string): string[] {
+const PAINT_KEY = "bt_offline_paint";
+const ERASE_KEY = "bt_offline_erase";
+
+let initPromise: Promise<void> | null = null;
+
+export async function ensureOfflineBufferReady(): Promise<void> {
+  if (!initPromise) {
+    initPromise = migrateLegacyOfflineStorage();
+  }
+  await initPromise;
+}
+
+async function readQueue(key: string): Promise<string[]> {
+  await ensureOfflineBufferReady();
   try {
-    return JSON.parse(localStorage.getItem(key) ?? '[]');
+    const raw = await getOfflineStorageItem(key);
+    return JSON.parse(raw ?? "[]") as string[];
   } catch {
     return [];
   }
 }
 
-function writeQueue(key: string, cells: string[]): void {
+async function writeQueue(key: string, cells: string[]): Promise<void> {
+  await ensureOfflineBufferReady();
   try {
-    localStorage.setItem(key, JSON.stringify(cells));
+    if (cells.length === 0) {
+      await removeOfflineStorageItem(key);
+    } else {
+      await setOfflineStorageItem(key, JSON.stringify(cells));
+    }
   } catch {
-    // localStorage full or unavailable — silently skip
+    /* storage full */
   }
 }
 
-export function getOfflinePaintQueue(): string[] {
+export async function getOfflinePaintQueue(): Promise<string[]> {
   return readQueue(PAINT_KEY);
 }
 
-export function getOfflineEraseQueue(): string[] {
+export async function getOfflineEraseQueue(): Promise<string[]> {
   return readQueue(ERASE_KEY);
 }
 
-export function appendOfflinePaintQueue(cells: string[]): void {
-  const existing = new Set(readQueue(PAINT_KEY));
+export async function appendOfflinePaintQueue(cells: string[]): Promise<void> {
+  if (cells.length === 0) return;
+  const existing = new Set(await readQueue(PAINT_KEY));
   cells.forEach((c) => existing.add(c));
-  writeQueue(PAINT_KEY, [...existing]);
+  await writeQueue(PAINT_KEY, [...existing]);
 }
 
-export function appendOfflineEraseQueue(cells: string[]): void {
-  const existing = new Set(readQueue(ERASE_KEY));
+export async function appendOfflineEraseQueue(cells: string[]): Promise<void> {
+  if (cells.length === 0) return;
+  const existing = new Set(await readQueue(ERASE_KEY));
   cells.forEach((c) => existing.add(c));
-  writeQueue(ERASE_KEY, [...existing]);
+  await writeQueue(ERASE_KEY, [...existing]);
 }
 
-export function clearOfflinePaintQueue(): void {
-  localStorage.removeItem(PAINT_KEY);
-}
-
-export function clearOfflineEraseQueue(): void {
-  localStorage.removeItem(ERASE_KEY);
-}
-
-/** Remove only the specified cells from a queue, leaving any newly-appended items intact. */
-export function removeFromOfflinePaintQueue(cells: string[]): void {
+export async function removeFromOfflinePaintQueue(cells: string[]): Promise<void> {
+  if (cells.length === 0) return;
   const toRemove = new Set(cells);
-  const remaining = readQueue(PAINT_KEY).filter((c) => !toRemove.has(c));
-  if (remaining.length === 0) {
-    localStorage.removeItem(PAINT_KEY);
-  } else {
-    writeQueue(PAINT_KEY, remaining);
-  }
+  const remaining = (await readQueue(PAINT_KEY)).filter((c) => !toRemove.has(c));
+  await writeQueue(PAINT_KEY, remaining);
 }
 
-export function removeFromOfflineEraseQueue(cells: string[]): void {
+export async function removeFromOfflineEraseQueue(cells: string[]): Promise<void> {
+  if (cells.length === 0) return;
   const toRemove = new Set(cells);
-  const remaining = readQueue(ERASE_KEY).filter((c) => !toRemove.has(c));
-  if (remaining.length === 0) {
-    localStorage.removeItem(ERASE_KEY);
-  } else {
-    writeQueue(ERASE_KEY, remaining);
-  }
+  const remaining = (await readQueue(ERASE_KEY)).filter((c) => !toRemove.has(c));
+  await writeQueue(ERASE_KEY, remaining);
 }
 
-export function hasOfflineQueued(): boolean {
-  return getOfflinePaintQueue().length > 0 || getOfflineEraseQueue().length > 0;
+export async function hasOfflineQueued(): Promise<boolean> {
+  const [p, e] = await Promise.all([getOfflinePaintQueue(), getOfflineEraseQueue()]);
+  return p.length > 0 || e.length > 0;
+}
+
+/** Union server cells with pending offline paints, minus pending erases. */
+export async function mergeServerCellsWithOfflineQueue(serverCells: string[]): Promise<Set<string>> {
+  const [paints, erases] = await Promise.all([getOfflinePaintQueue(), getOfflineEraseQueue()]);
+  const merged = new Set(serverCells);
+  for (const c of erases) merged.delete(c);
+  for (const c of paints) merged.add(c);
+  return merged;
 }

@@ -52,8 +52,30 @@ export interface Database {
         };
         Relationships: [];
       };
+      visit_sync_batches: {
+        Row: {
+          user_id: string;
+          client_batch_id: string;
+          applied_at: string;
+        };
+        Insert: {
+          user_id: string;
+          client_batch_id: string;
+          applied_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      apply_visit_batch: {
+        Args: {
+          p_client_batch_id: string;
+          p_events: Json;
+        };
+        Returns: Json;
+      };
+    };
   };
 }
