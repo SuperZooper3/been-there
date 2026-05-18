@@ -27,6 +27,8 @@ interface Props {
   centerOn?: { lat: number; lng: number } | null;
   /** Increment `seq` to ease the map to this point at the default street zoom (13). */
   recenterTrackerAt?: { lat: number; lng: number; seq: number } | null;
+  /** After a successful photo upload — ease here at a close-up zoom whenever `seq` changes. */
+  focusPhotoUploadAt?: { lat: number; lng: number; seq: number } | null;
   /** When true, pan the map to follow `currentLocation` as it updates. */
   followTracker?: boolean;
   /** User panned the map — turn off follow mode. */
@@ -324,6 +326,7 @@ export default function Map({
   onZoomChange,
   centerOn,
   recenterTrackerAt,
+  focusPhotoUploadAt,
   followTracker = false,
   onFollowTrackerChange,
   currentLocation,
@@ -535,6 +538,24 @@ export default function Map({
     if (map.isStyleLoaded()) run();
     else map.once("load", run);
   }, [recenterTrackerAt?.seq]);
+
+  /** Close-up on the pin right after an upload (distinct zoom from tracker recenter). */
+  const PHOTO_UPLOAD_FOCUS_ZOOM = 16;
+  useEffect(() => {
+    if (!focusPhotoUploadAt) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const { lat, lng } = focusPhotoUploadAt;
+    const run = () => {
+      map.easeTo({
+        center: [lng, lat],
+        zoom: PHOTO_UPLOAD_FOCUS_ZOOM,
+        duration: 650,
+      });
+    };
+    if (map.isStyleLoaded()) run();
+    else map.once("load", run);
+  }, [focusPhotoUploadAt?.seq]);
 
   // Smooth follow while recording location
   useEffect(() => {

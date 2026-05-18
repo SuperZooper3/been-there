@@ -125,6 +125,12 @@ export default function MapApp() {
   /** Set true when tracking starts; first `applyLocation` consumes it to recenter the map on the tracker pin */
   const shouldRecenterMapOnTrackerFixRef = useRef(false);
   const [trackerRecenterAt, setTrackerRecenterAt] = useState<{ lat: number; lng: number; seq: number } | null>(null);
+  /** After a successful photo upload — Map eases here at close zoom; bump `seq` each time. */
+  const [photoUploadFocusAt, setPhotoUploadFocusAt] = useState<{
+    lat: number;
+    lng: number;
+    seq: number;
+  } | null>(null);
   const [followTracker, setFollowTracker] = useState(false);
   // Native background geolocation watcher ID — kept in ref so stopTracking can remove it
   const nativeWatcherIdRef = useRef<string | null>(null);
@@ -546,7 +552,13 @@ export default function MapApp() {
       return;
     }
     setPhotoUploadWarning(null);
+    setFollowTracker(false);
     setPhotos((prev) => [data.photo!, ...prev]);
+    setPhotoUploadFocusAt((prev) => ({
+      lat: data.photo!.lat,
+      lng: data.photo!.lng,
+      seq: (prev?.seq ?? 0) + 1,
+    }));
     setPendingPin(null);
     setManualPlaceFile(null);
     setMode("browse");
@@ -775,7 +787,13 @@ export default function MapApp() {
       return;
     }
     setPhotoUploadWarning(null);
+    setFollowTracker(false);
     setPhotos((prev) => [data.photo!, ...prev]);
+    setPhotoUploadFocusAt((prev) => ({
+      lat: data.photo!.lat,
+      lng: data.photo!.lng,
+      seq: (prev?.seq ?? 0) + 1,
+    }));
     setGeoUploadOpen(false);
   }
 
@@ -828,6 +846,7 @@ export default function MapApp() {
         onZoomChange={setZoom}
         centerOn={initialCenter}
         recenterTrackerAt={trackerRecenterAt}
+        focusPhotoUploadAt={photoUploadFocusAt}
         followTracker={followTracker}
         onFollowTrackerChange={setFollowTracker}
         currentLocation={currentLocation}
