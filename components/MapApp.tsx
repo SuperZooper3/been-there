@@ -30,6 +30,11 @@ import {
 } from "@/lib/offline-buffer";
 import type { VisitMetricRow } from "@/lib/cell-metrics";
 import { INTELLIGENCE_LABELS, type IntelligenceVariant } from "@/lib/intelligence";
+import {
+  reencodeImageFileAsJpeg,
+  MAX_PHOTO_UPLOAD_BYTES,
+  formatFileSizeForUi,
+} from "@/lib/reencode-image-jpeg";
 
 // Pure-native Capacitor plugin — no JS bundle to import; accessed via the native bridge.
 // Safe to register at module level: returns a no-op proxy on web (never called outside isNativePlatform()).
@@ -88,6 +93,8 @@ export default function MapApp() {
   const [selectedPhoto, setSelectedPhoto] = useState<PhotoPin | null>(null);
   const [pendingPin, setPendingPin] = useState<{ lat: number; lng: number } | null>(null);
   const [geoUploadOpen, setGeoUploadOpen] = useState(false);
+  /** In-modal messages for photo upload (oversized JPEG, network/API errors). */
+  const [photoUploadWarning, setPhotoUploadWarning] = useState<string | null>(null);
   const [manualPlaceFile, setManualPlaceFile] = useState<File | null>(null);
   const [initialCenter, setInitialCenter] = useState<{ lat: number; lng: number } | null>(null);
 
@@ -496,19 +503,50 @@ export default function MapApp() {
 
   // Pin drop
   const handlePinDrop = useCallback((lat: number, lng: number) => {
+    setPhotoUploadWarning(null);
     setPendingPin({ lat, lng });
   }, []);
 
   async function handlePinConfirm(file: File, caption: string) {
     if (!pendingPin) return;
+    let jpegFile: File;
+    try {
+      jpegFile = await reencodeImageFileAsJpeg(file);
+    } catch {
+      setPhotoUploadWarning("Couldn’t read that image. Try another file.");
+      return;
+    }
+    if (jpegFile.size > MAX_PHOTO_UPLOAD_BYTES) {
+      setPhotoUploadWarning(
+        `After compression this photo is still ${formatFileSizeForUi(jpegFile.size)}, which exceeds the ${formatFileSizeForUi(MAX_PHOTO_UPLOAD_BYTES)} upload limit. Choose a smaller or lower-resolution image.`,
+      );
+      return;
+    }
     const form = new FormData();
     form.append("lat", String(pendingPin.lat));
     form.append("lng", String(pendingPin.lng));
     form.append("caption", caption);
-    form.append("file", file);
-    const res = await fetch("/api/photos", { method: "POST", body: form });
-    const data = await res.json();
-    if (data.photo) setPhotos((prev) => [data.photo, ...prev]);
+    form.append("file", jpegFile);
+    let res: Response;
+    try {
+      res = await fetch("/api/photos", { method: "POST", body: form });
+    } catch {
+      setPhotoUploadWarning("Network error while uploading. Check your connection and try again.");
+      return;
+    }
+    let data: { photo?: PhotoPin; error?: string };
+    try {
+      data = (await res.json()) as { photo?: PhotoPin; error?: string };
+    } catch {
+      setPhotoUploadWarning("Upload failed (unexpected response). Try again.");
+      return;
+    }
+    if (!res.ok || !data.photo) {
+      setPhotoUploadWarning(typeof data.error === "string" ? data.error : "Photo upload failed.");
+      return;
+    }
+    setPhotoUploadWarning(null);
+    setPhotos((prev) => [data.photo!, ...prev]);
     setPendingPin(null);
     setManualPlaceFile(null);
     setMode("browse");
@@ -700,18 +738,49 @@ export default function MapApp() {
   }, [isTracking]);
 
   async function handleGeoUploadSave(file: File, lat: number, lng: number, caption: string) {
-    setGeoUploadOpen(false);
+    let jpegFile: File;
+    try {
+      jpegFile = await reencodeImageFileAsJpeg(file);
+    } catch {
+      setPhotoUploadWarning("Couldn’t read that image. Try another file.");
+      return;
+    }
+    if (jpegFile.size > MAX_PHOTO_UPLOAD_BYTES) {
+      setPhotoUploadWarning(
+        `After compression this photo is still ${formatFileSizeForUi(jpegFile.size)}, which exceeds the ${formatFileSizeForUi(MAX_PHOTO_UPLOAD_BYTES)} upload limit. Choose a smaller or lower-resolution image.`,
+      );
+      return;
+    }
     const form = new FormData();
     form.append("lat", String(lat));
     form.append("lng", String(lng));
     form.append("caption", caption);
-    form.append("file", file);
-    const res = await fetch("/api/photos", { method: "POST", body: form });
-    const data = await res.json();
-    if (data.photo) setPhotos((prev) => [data.photo, ...prev]);
+    form.append("file", jpegFile);
+    let res: Response;
+    try {
+      res = await fetch("/api/photos", { method: "POST", body: form });
+    } catch {
+      setPhotoUploadWarning("Network error while uploading. Check your connection and try again.");
+      return;
+    }
+    let data: { photo?: PhotoPin; error?: string };
+    try {
+      data = (await res.json()) as { photo?: PhotoPin; error?: string };
+    } catch {
+      setPhotoUploadWarning("Upload failed (unexpected response). Try again.");
+      return;
+    }
+    if (!res.ok || !data.photo) {
+      setPhotoUploadWarning(typeof data.error === "string" ? data.error : "Photo upload failed.");
+      return;
+    }
+    setPhotoUploadWarning(null);
+    setPhotos((prev) => [data.photo!, ...prev]);
+    setGeoUploadOpen(false);
   }
 
   function handleGeoUploadPlaceManually(file: File) {
+    setPhotoUploadWarning(null);
     setGeoUploadOpen(false);
     setManualPlaceFile(file);
     setMode("pin");
@@ -770,7 +839,10 @@ export default function MapApp() {
       <StatsPanel
         cellCount={visitedCells.size}
         photoCount={photos.length}
-        onUpload={() => setGeoUploadOpen(true)}
+        onUpload={() => {
+          setPhotoUploadWarning(null);
+          setGeoUploadOpen(true);
+        }}
         isTracking={isTracking}
         // On native the plugin fires on movement, not on a 60s timer — progress ring is meaningless
         trackingProgress={Capacitor.isNativePlatform() ? 0 : trackingProgress}
@@ -919,7 +991,10 @@ export default function MapApp() {
           undoStack={undoStack}
           onUndo={handleUndo}
           onRedo={handleRedo}
-          onUploadPhoto={() => setGeoUploadOpen(true)}
+          onUploadPhoto={() => {
+            setPhotoUploadWarning(null);
+            setGeoUploadOpen(true);
+          }}
           drawUnlocked={drawUnlocked}
           intelligenceActive={intelligenceVariant !== "none"}
           onToggleIntelligence={toggleIntelligenceSparkle}
@@ -943,7 +1018,14 @@ export default function MapApp() {
           lng={pendingPin.lng}
           initialFile={manualPlaceFile ?? undefined}
           onConfirm={handlePinConfirm}
-          onCancel={() => { setPendingPin(null); setManualPlaceFile(null); setMode("browse"); }}
+          uploadWarning={photoUploadWarning}
+          onClearUploadWarning={() => setPhotoUploadWarning(null)}
+          onCancel={() => {
+            setPhotoUploadWarning(null);
+            setPendingPin(null);
+            setManualPlaceFile(null);
+            setMode("browse");
+          }}
         />
       )}
 
@@ -951,7 +1033,12 @@ export default function MapApp() {
         <GeoUploadDialog
           onSave={handleGeoUploadSave}
           onPlaceManually={handleGeoUploadPlaceManually}
-          onCancel={() => setGeoUploadOpen(false)}
+          uploadWarning={photoUploadWarning}
+          onClearUploadWarning={() => setPhotoUploadWarning(null)}
+          onCancel={() => {
+            setPhotoUploadWarning(null);
+            setGeoUploadOpen(false);
+          }}
         />
       )}
 

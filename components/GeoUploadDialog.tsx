@@ -12,13 +12,21 @@ type Stage =
   | { type: "no-gps"; file: File; preview: string };
 
 interface Props {
-  onSave: (file: File, lat: number, lng: number, caption: string) => void;
+  onSave: (file: File, lat: number, lng: number, caption: string) => void | Promise<void>;
   /** Called when the user wants to place the photo manually (no GPS found). */
   onPlaceManually: (file: File) => void;
   onCancel: () => void;
+  uploadWarning?: string | null;
+  onClearUploadWarning?: () => void;
 }
 
-export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: Props) {
+export default function GeoUploadDialog({
+  onSave,
+  onPlaceManually,
+  onCancel,
+  uploadWarning,
+  onClearUploadWarning,
+}: Props) {
   const [stage, setStage] = useState<Stage>({ type: "idle" });
   const [caption, setCaption] = useState("");
   const [dragging, setDragging] = useState(false);
@@ -54,6 +62,7 @@ export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: P
   }, []);
 
   async function processFile(file: File) {
+    onClearUploadWarning?.();
     setStage({ type: "loading" });
     const preview = URL.createObjectURL(file);
     try {
@@ -89,11 +98,15 @@ export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: P
     if (file?.type.startsWith("image/")) processFile(file);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (stage.type !== "geolocated" || submitting) return;
     setSubmitting(true);
-    onSave(stage.file, stage.lat, stage.lng, caption);
+    try {
+      await onSave(stage.file, stage.lat, stage.lng, caption);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -217,6 +230,22 @@ export default function GeoUploadDialog({ onSave, onPlaceManually, onCancel }: P
                 outline: "none",
               }}
             />
+
+            {uploadWarning ? (
+              <div
+                role="alert"
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  background: "rgba(237, 137, 54, 0.12)",
+                  border: "1px solid rgba(237, 137, 54, 0.45)",
+                }}
+              >
+                <p style={{ margin: 0, fontSize: 12, color: "var(--color-text)", lineHeight: 1.5 }}>
+                  {uploadWarning}
+                </p>
+              </div>
+            ) : null}
 
             <div style={{ display: "flex", gap: 8 }}>
               <button

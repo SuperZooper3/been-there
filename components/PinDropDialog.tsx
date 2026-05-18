@@ -6,11 +6,23 @@ interface Props {
   lat: number;
   lng: number;
   initialFile?: File;
-  onConfirm: (file: File, caption: string) => void;
+  onConfirm: (file: File, caption: string) => void | Promise<void>;
   onCancel: () => void;
+  /** Shown inside the modal (oversized after compression, upload errors, etc.). */
+  uploadWarning?: string | null;
+  /** Called when the user picks a different image so stale warnings clear. */
+  onClearUploadWarning?: () => void;
 }
 
-export default function PinDropDialog({ lat, lng, initialFile, onConfirm, onCancel }: Props) {
+export default function PinDropDialog({
+  lat,
+  lng,
+  initialFile,
+  onConfirm,
+  onCancel,
+  uploadWarning,
+  onClearUploadWarning,
+}: Props) {
   const [caption, setCaption] = useState("");
   const [preview, setPreview] = useState<string | null>(
     initialFile ? URL.createObjectURL(initialFile) : null
@@ -21,6 +33,7 @@ export default function PinDropDialog({ lat, lng, initialFile, onConfirm, onCanc
   const inputRef = useRef<HTMLInputElement>(null);
 
   function applyFile(f: File) {
+    onClearUploadWarning?.();
     setFile(f);
     setPreview(URL.createObjectURL(f));
   }
@@ -46,11 +59,15 @@ export default function PinDropDialog({ lat, lng, initialFile, onConfirm, onCanc
     if (f?.type.startsWith("image/")) applyFile(f);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file || submitting) return;
     setSubmitting(true);
-    onConfirm(file, caption);
+    try {
+      await onConfirm(file, caption);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -155,6 +172,22 @@ export default function PinDropDialog({ lat, lng, initialFile, onConfirm, onCanc
             outline: "none",
           }}
         />
+
+        {uploadWarning ? (
+          <div
+            role="alert"
+            style={{
+              padding: "10px 12px",
+              borderRadius: 10,
+              background: "rgba(237, 137, 54, 0.12)",
+              border: "1px solid rgba(237, 137, 54, 0.45)",
+            }}
+          >
+            <p style={{ margin: 0, fontSize: 12, color: "var(--color-text)", lineHeight: 1.5 }}>
+              {uploadWarning}
+            </p>
+          </div>
+        ) : null}
 
         <div style={{ display: "flex", gap: 8 }}>
           <button
