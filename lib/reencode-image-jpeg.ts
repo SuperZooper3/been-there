@@ -10,7 +10,7 @@ export function formatFileSizeForUi(bytes: number): string {
 /** Longest edge (px) after resize — smaller uploads and safer canvas memory on mobile. */
 const DEFAULT_MAX_EDGE = 2560;
 
-const DEFAULT_JPEG_QUALITY = 0.88;
+const DEFAULT_JPEG_QUALITY = 0.92;
 
 export type ReencodeJpegOptions = {
   maxEdge?: number;
@@ -55,6 +55,9 @@ export async function reencodeImageFileAsJpeg(
     canvas.height = dh;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("Canvas is not available.");
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
 
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, dw, dh);
