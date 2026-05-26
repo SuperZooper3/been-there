@@ -155,7 +155,7 @@ export default function NativeOnboardingModal({ onClose }: Props) {
               Been There on your phone
             </p>
             <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--color-text-muted)", lineHeight: 1.55 }}>
-              When you tap <strong>Track</strong>, we use your GPS to paint hex cells you pass through — including while
+              When Been There starts recording, we use your GPS to paint hex cells you pass through — including while
               the screen is off. Android needs a small <strong>ongoing</strong> notification for that (it stays in the
               shade, is <strong>silent</strong>, and normally <strong>can&apos;t be swiped away</strong> while recording — that&apos;s
               required so the OS doesn&apos;t kill tracking).
@@ -293,7 +293,7 @@ export default function NativeOnboardingModal({ onClose }: Props) {
               All-the-time location
             </p>
             <p style={{ margin: "0 0 16px", fontSize: 13, color: "var(--color-text-muted)", lineHeight: 1.55 }}>
-              When you start <strong>Track</strong>, choose <strong>Allow all the time</strong> if you want cells while the
+              When recording starts, choose <strong>Allow all the time</strong> if you want cells while the
               phone is locked. <strong>Only while using the app</strong> updates when Been There is on screen.
             </p>
             <button

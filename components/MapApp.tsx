@@ -108,7 +108,12 @@ export default function MapApp() {
   // Manual draw mode — hidden by default, revealed when location is denied
   const [drawUnlocked, setDrawUnlocked] = useState(false);
   const [showDrawModal, setShowDrawModal] = useState(false);
-  const [showNativeOnboarding, setShowNativeOnboarding] = useState(false);
+  const [showNativeOnboarding, setShowNativeOnboarding] = useState(() => (
+    Capacitor.isNativePlatform() && !hasCompletedNativeOnboarding()
+  ));
+  const [nativeAutoStartReady, setNativeAutoStartReady] = useState(() => (
+    !Capacitor.isNativePlatform() || hasCompletedNativeOnboarding()
+  ));
   /** Android: last GPS sample time from native plugin (ms), mirrors notification “Last GPS fix” */
   const [lastNativeGpsAtMs, setLastNativeGpsAtMs] = useState<number | null>(null);
   /** Res-9 rows from GET — Map aggregates by zoom for overlays */
@@ -118,6 +123,8 @@ export default function MapApp() {
   const lastIntelligenceVariantRef = useRef<Exclude<IntelligenceVariant, "none">>("lastBeen");
   const isTrackingRef = useRef(false);
   isTrackingRef.current = isTracking;
+  const isStartingTrackingRef = useRef(false);
+  const nativeAutoStartAttemptedRef = useRef(false);
   const trackingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const trackingElapsedRef = useRef(0);
   // Previous ping location — used to interpolate cells along the path between pings
@@ -199,12 +206,27 @@ export default function MapApp() {
     load();
   }, []);
 
-  // First launch on native shell: explain notifications + battery before they hit Track.
+  // First launch on native shell: explain notifications + battery before tracking starts.
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-    if (hasCompletedNativeOnboarding()) return;
+    if (hasCompletedNativeOnboarding()) {
+      setNativeAutoStartReady(true);
+      return;
+    }
+    setNativeAutoStartReady(false);
     setShowNativeOnboarding(true);
   }, []);
+
+  // Native shell: begin tracking automatically on app open, after first-run guidance is dismissed.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    if (!nativeAutoStartReady) return;
+    if (showNativeOnboarding) return;
+    if (nativeAutoStartAttemptedRef.current) return;
+    nativeAutoStartAttemptedRef.current = true;
+    void startTracking();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nativeAutoStartReady, showNativeOnboarding]);
 
   // isSyncing prevents the reconnect flush and the 500ms batch from racing (M2)
   const isSyncingRef = useRef(false);
@@ -591,6 +613,11 @@ export default function MapApp() {
   applyLocationRef.current = applyLocation;
 
   async function startTracking() {
+    if (isStartingTrackingRef.current || isTrackingRef.current || nativeWatcherIdRef.current) {
+      return;
+    }
+    isStartingTrackingRef.current = true;
+
     if (Capacitor.isNativePlatform()) {
       try {
         if (Capacitor.getPlatform() === "android") {
@@ -638,10 +665,16 @@ export default function MapApp() {
       } catch {
         shouldRecenterMapOnTrackerFixRef.current = false;
         setTrackingDenied(true);
+      } finally {
+        isStartingTrackingRef.current = false;
       }
     } else {
       // Web path — unchanged
-      if (!navigator.geolocation) { setTrackingDenied(true); return; }
+      if (!navigator.geolocation) {
+        isStartingTrackingRef.current = false;
+        setTrackingDenied(true);
+        return;
+      }
       shouldRecenterMapOnTrackerFixRef.current = true;
       setFollowTracker(true);
       navigator.geolocation.getCurrentPosition(
@@ -651,10 +684,12 @@ export default function MapApp() {
           setTrackingDenied(false);
           trackingElapsedRef.current = 0;
           setTrackingProgress(0);
+          isStartingTrackingRef.current = false;
         },
         () => {
           shouldRecenterMapOnTrackerFixRef.current = false;
           setTrackingDenied(true);
+          isStartingTrackingRef.current = false;
         },
         { enableHighAccuracy: true, timeout: 10_000 }
       );
@@ -703,8 +738,14 @@ export default function MapApp() {
     }
   }
 
+  function handleNativeOnboardingClose() {
+    setShowNativeOnboarding(false);
+    setNativeAutoStartReady(true);
+  }
+
   function stopTracking() {
     void flushPendingRef.current();
+    isStartingTrackingRef.current = false;
     if (Capacitor.isNativePlatform()) {
       // Capture ID into a local var BEFORE clearing the ref (S2 — avoids null read in async callback)
       const watcherId = nativeWatcherIdRef.current;
@@ -813,7 +854,7 @@ export default function MapApp() {
   return (
     <div style={{ position: "relative", width: "100vw", height: "100dvh", overflow: "hidden" }}>
       {showNativeOnboarding && (
-        <NativeOnboardingModal onClose={() => setShowNativeOnboarding(false)} />
+        <NativeOnboardingModal onClose={handleNativeOnboardingClose} />
       )}
 
       {loadError && (
