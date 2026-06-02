@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
+import Image from "next/image";
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { App } from "@capacitor/app";
 import type { BackgroundGeolocationPlugin, Location as BGLocation, CallbackError } from "@capacitor-community/background-geolocation";
+import { CheckCircle2, Clock, MapPin, Play, Radio, RefreshCw, Square, WifiOff } from "lucide-react";
 import { resolutionForZoom, snapToCell, cellToCenter, getCellsAlongLine, getParentCell, DRAW_RESOLUTION } from "@/lib/h3";
 import {
   initialStack,
@@ -21,12 +23,22 @@ import PolaroidPin from "./PolaroidPin";
 import PinDropDialog from "./PinDropDialog";
 import GeoUploadDialog from "./GeoUploadDialog";
 import {
+  appendOfflineGpsPing,
   appendOfflinePaintQueue,
   appendOfflineEraseQueue,
+  createOfflineGpsPing,
+  getLatestOfflineGpsVisit,
+  getOfflineGpsCellSet,
+  getOfflineGpsPings,
   getOfflinePaintQueue,
   getOfflineEraseQueue,
+  getOfflineQueueStats,
+  offlineGpsPingsToVisitEvents,
+  removeOfflineGpsPings,
   removeFromOfflinePaintQueue,
   removeFromOfflineEraseQueue,
+  type OfflineGpsPing,
+  type OfflineQueueStats,
 } from "@/lib/offline-buffer";
 import type { VisitMetricRow } from "@/lib/cell-metrics";
 import { INTELLIGENCE_LABELS, type IntelligenceVariant } from "@/lib/intelligence";
@@ -44,6 +56,8 @@ const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>("Backg
 const NATIVE_DISTANCE_FILTER_M = 48;
 /** How often to POST batched cell paints while native tracking (also flushes on app foreground / pause / stop). */
 const NATIVE_TRACK_FLUSH_MS = 10 * 60 * 1000;
+const GPS_SYNC_DEBOUNCE_MS = 3_000;
+const OFFLINE_VISIT_EVENT_BATCH_LIMIT = 500;
 
 export type MapMode = "browse" | "draw" | "erase" | "pin";
 
@@ -72,6 +86,45 @@ function resolveInitialCenter(
   return bestH3 ? cellToCenter(bestH3) : null;
 }
 
+function getLocalQueuedVisitedCells(): Set<string> {
+  const localCells = getOfflineGpsCellSet();
+  for (const cell of getOfflinePaintQueue()) localCells.add(cell);
+  for (const cell of getOfflineEraseQueue()) localCells.delete(cell);
+  return localCells;
+}
+
+function mergeLocalQueuedCells(serverCells: Set<string>): Set<string> {
+  const merged = new Set(serverCells);
+  for (const cell of getOfflineEraseQueue()) merged.delete(cell);
+  for (const cell of getOfflinePaintQueue()) merged.add(cell);
+  for (const cell of getOfflineGpsCellSet()) merged.add(cell);
+  return merged;
+}
+
+function takeGpsPingBatch(pings: OfflineGpsPing[]): OfflineGpsPing[] {
+  const batch: OfflineGpsPing[] = [];
+  let eventCount = 0;
+  for (const ping of pings) {
+    if (batch.length > 0 && eventCount + ping.cells.length > OFFLINE_VISIT_EVENT_BATCH_LIMIT) {
+      break;
+    }
+    batch.push(ping);
+    eventCount += ping.cells.length;
+    if (eventCount >= OFFLINE_VISIT_EVENT_BATCH_LIMIT) break;
+  }
+  return batch;
+}
+
+const EMPTY_OFFLINE_STATS: OfflineQueueStats = {
+  gpsPingCount: 0,
+  gpsVisitEventCount: 0,
+  gpsUniqueCellCount: 0,
+  manualPaintCellCount: 0,
+  manualEraseCellCount: 0,
+  totalQueuedCount: 0,
+  lastRecordedAt: null,
+};
+
 export default function MapApp() {
   // Map state
   const [mode, setMode] = useState<MapMode>("browse");
@@ -79,6 +132,14 @@ export default function MapApp() {
   const renderResolution = resolutionForZoom(zoom);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(() => (
+    typeof navigator === "undefined" ? true : navigator.onLine
+  ));
+  const [offlineQueueStats, setOfflineQueueStats] = useState<OfflineQueueStats>(() => (
+    typeof window === "undefined" ? EMPTY_OFFLINE_STATS : getOfflineQueueStats()
+  ));
+  const [offlineStatus, setOfflineStatus] = useState<string | null>(null);
+  const [offlineSyncBusy, setOfflineSyncBusy] = useState(false);
 
   // Visited cells: live Set for fast lookup
   const [visitedCells, setVisitedCells] = useState<Set<string>>(new Set());
@@ -143,12 +204,13 @@ export default function MapApp() {
   const nativeWatcherIdRef = useRef<string | null>(null);
   // Stable ref to applyLocation — updated every render so the native plugin callback
   // always calls the latest version without capturing a stale closure.
-  const applyLocationRef = useRef<(lat: number, lng: number) => void>(() => {});
+  const applyLocationRef = useRef<(lat: number, lng: number, recordedAtMs?: number) => void>(() => {});
 
   // Batch paint queue: flush to API every 500ms on web / manual draw; native tracking uses a 10 min timer + lifecycle flushes.
   const pendingPaintRef = useRef<Set<string>>(new Set());
   const pendingEraseRef = useRef<Set<string>>(new Set());
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const offlineSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flushPendingRef = useRef<() => Promise<void>>(async () => {});
   const syncOfflineQueuesRef = useRef<() => Promise<void>>(async () => {});
 
@@ -158,53 +220,69 @@ export default function MapApp() {
   const visitedCellsRef = useRef(visitedCells);
   useEffect(() => { visitedCellsRef.current = visitedCells; }, [visitedCells]);
 
+  const refreshOfflineStats = useCallback(() => {
+    setOfflineQueueStats(getOfflineQueueStats());
+  }, []);
+
+  const loadRemoteData = useCallback(async (showLoading = false): Promise<boolean> => {
+    if (showLoading) setIsLoading(true);
+    try {
+      const [cellsRes, photosRes] = await Promise.all([
+        fetch(`/api/cells?zoom=13`),
+        fetch("/api/photos"),
+      ]);
+      const cellsData = await cellsRes.json();
+      const photosData = await photosRes.json();
+      if (cellsData.error) {
+        console.error("cells load error:", cellsData.error);
+        if (cellsData.error.includes("relation") || cellsData.error.includes("path")) {
+          setLoadError("Database tables not found. Run the migration SQL in Supabase first.");
+        }
+      } else if (cellsData.cells) {
+        const serverSet = new Set<string>(cellsData.cells as string[]);
+        const merged = mergeLocalQueuedCells(serverSet);
+        visitedCellsRef.current = merged;
+        setVisitedCells(merged);
+        const metrics = Array.isArray(cellsData.cellMetrics)
+          ? (cellsData.cellMetrics as VisitMetricRow[])
+          : [];
+        if (metrics.length > 0) {
+          setCellMetricsRes9(metrics);
+        }
+        const initial = resolveInitialCenter(
+          (cellsData.recentCell as string | null) ?? null,
+          metrics,
+          getLatestOfflineGpsVisit()
+        );
+        if (initial) setInitialCenter(initial);
+      }
+      if (!photosData.error && photosData.photos) {
+        setPhotos(photosData.photos);
+      }
+      setIsOnline(true);
+      refreshOfflineStats();
+      return true;
+    } catch (e) {
+      console.error("Failed to load map data:", e);
+      if (Capacitor.isNativePlatform()) {
+        const localCells = getLocalQueuedVisitedCells();
+        visitedCellsRef.current = localCells;
+        setVisitedCells(localCells);
+        const latest = getLatestOfflineGpsVisit();
+        if (latest) setInitialCenter(cellToCenter(latest.h3));
+        setIsOnline(false);
+      }
+      refreshOfflineStats();
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [refreshOfflineStats]);
+
   // Initial data load
   useEffect(() => {
-    async function load() {
-      try {
-        const [cellsRes, photosRes] = await Promise.all([
-          fetch(`/api/cells?zoom=13`),
-          fetch("/api/photos"),
-        ]);
-        const cellsData = await cellsRes.json();
-        const photosData = await photosRes.json();
-        if (cellsData.error) {
-          console.error("cells load error:", cellsData.error);
-          if (cellsData.error.includes("relation") || cellsData.error.includes("path")) {
-            setLoadError("Database tables not found. Run the migration SQL in Supabase first.");
-          }
-        } else if (cellsData.cells) {
-          const serverSet = new Set<string>(cellsData.cells as string[]);
-          const paints = getOfflinePaintQueue();
-          const erases = getOfflineEraseQueue();
-          const merged = new Set(serverSet);
-          for (const c of erases) merged.delete(c);
-          for (const c of paints) merged.add(c);
-          setVisitedCells(merged);
-          const metrics = Array.isArray(cellsData.cellMetrics)
-            ? (cellsData.cellMetrics as VisitMetricRow[])
-            : [];
-          if (metrics.length > 0) {
-            setCellMetricsRes9(metrics);
-          }
-          const initial = resolveInitialCenter(
-            (cellsData.recentCell as string | null) ?? null,
-            metrics,
-            null
-          );
-          if (initial) setInitialCenter(initial);
-        }
-        if (!photosData.error && photosData.photos) {
-          setPhotos(photosData.photos);
-        }
-      } catch (e) {
-        console.error("Failed to load map data:", e);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    load();
-  }, []);
+    void loadRemoteData(true);
+  }, [loadRemoteData]);
 
   // First launch on native shell: explain notifications + battery before tracking starts.
   useEffect(() => {
@@ -251,9 +329,19 @@ export default function MapApp() {
     if (isSyncingRef.current) return;
     const toErase = getOfflineEraseQueue();
     const toPaint = getOfflinePaintQueue();
-    if (toErase.length === 0 && toPaint.length === 0) return;
+    const gpsPings = getOfflineGpsPings();
+    if (toErase.length === 0 && toPaint.length === 0 && gpsPings.length === 0) {
+      refreshOfflineStats();
+      return;
+    }
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setIsOnline(false);
+      refreshOfflineStats();
+      return;
+    }
     isSyncingRef.current = true;
     try {
+      let shouldRefreshMetrics = false;
       if (toErase.length > 0) {
         const res = await fetch("/api/cells", {
           method: "DELETE",
@@ -261,7 +349,7 @@ export default function MapApp() {
           body: JSON.stringify({ cells: toErase }),
         });
         if (res.ok) {
-          await refreshCellMetrics();
+          shouldRefreshMetrics = true;
           removeFromOfflineEraseQueue(toErase);
         }
       }
@@ -272,23 +360,64 @@ export default function MapApp() {
           body: JSON.stringify({ cells: toPaint }),
         });
         if (res.ok) {
-          await refreshCellMetrics();
+          shouldRefreshMetrics = true;
           removeFromOfflinePaintQueue(toPaint);
         }
       }
+
+      for (;;) {
+        const batch = takeGpsPingBatch(getOfflineGpsPings());
+        if (batch.length === 0) break;
+        const visits = offlineGpsPingsToVisitEvents(batch);
+        if (visits.length === 0) {
+          removeOfflineGpsPings(batch.map((ping) => ping.id));
+          continue;
+        }
+        const res = await fetch("/api/cells", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ visits }),
+        });
+        if (!res.ok) break;
+        shouldRefreshMetrics = true;
+        removeOfflineGpsPings(batch.map((ping) => ping.id));
+      }
+
+      if (shouldRefreshMetrics) {
+        await refreshCellMetrics();
+        refreshOfflineStats();
+      }
+      setIsOnline(true);
     } catch {
       // Leave queues intact — will retry on next reconnect or load
+      setIsOnline(false);
     } finally {
+      refreshOfflineStats();
       isSyncingRef.current = false;
     }
-  }, [refreshCellMetrics]);
+  }, [refreshCellMetrics, refreshOfflineStats]);
 
   // Attempt offline queue sync on mount and whenever the device comes back online
   useEffect(() => {
-    syncOfflineQueues();
-    window.addEventListener("online", syncOfflineQueues);
-    return () => window.removeEventListener("online", syncOfflineQueues);
-  }, [syncOfflineQueues]);
+    const handleOnline = () => {
+      setIsOnline(true);
+      setOfflineStatus("Checking saved visits...");
+      void syncOfflineQueues();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setOfflineStatus("Offline");
+      refreshOfflineStats();
+    };
+
+    void syncOfflineQueues();
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [refreshOfflineStats, syncOfflineQueues]);
 
   // Flush pending cell changes to API, falling back to localStorage when offline (M1, M2)
   const flushPending = useCallback(async () => {
@@ -301,6 +430,8 @@ export default function MapApp() {
       // Offline — persist to localStorage; will be flushed on reconnect
       if (toPaint.length > 0) appendOfflinePaintQueue(toPaint);
       if (toErase.length > 0) appendOfflineEraseQueue(toErase);
+      setIsOnline(false);
+      refreshOfflineStats();
       return;
     }
 
@@ -312,10 +443,16 @@ export default function MapApp() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cells: toErase }),
         });
-        if (res.ok) await refreshCellMetrics();
+        if (res.ok) {
+          await refreshCellMetrics();
+        } else {
+          appendOfflineEraseQueue(toErase);
+        }
       }
     } catch {
       if (toErase.length > 0) appendOfflineEraseQueue(toErase);
+      setIsOnline(false);
+      refreshOfflineStats();
     }
 
     try {
@@ -325,12 +462,20 @@ export default function MapApp() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cells: toPaint }),
         });
-        if (res.ok) await refreshCellMetrics();
+        if (res.ok) {
+          await refreshCellMetrics();
+        } else {
+          appendOfflinePaintQueue(toPaint);
+        }
       }
+      if (toPaint.length > 0 || toErase.length > 0) setIsOnline(true);
     } catch {
       if (toPaint.length > 0) appendOfflinePaintQueue(toPaint);
+      setIsOnline(false);
+      refreshOfflineStats();
     }
-  }, [refreshCellMetrics]);
+    refreshOfflineStats();
+  }, [refreshCellMetrics, refreshOfflineStats]);
 
   flushPendingRef.current = flushPending;
   syncOfflineQueuesRef.current = syncOfflineQueues;
@@ -340,6 +485,7 @@ export default function MapApp() {
     if (!Capacitor.isNativePlatform() || !isTracking) return;
     const id = window.setInterval(() => {
       void flushPendingRef.current();
+      void syncOfflineQueuesRef.current();
     }, NATIVE_TRACK_FLUSH_MS);
     return () => clearInterval(id);
   }, [isTracking]);
@@ -349,11 +495,9 @@ export default function MapApp() {
     if (!Capacitor.isNativePlatform()) return;
     let cancelled = false;
     let sub: Awaited<ReturnType<typeof App.addListener>> | undefined;
-    void App.addListener("appStateChange", ({ isActive }) => {
+    void App.addListener("appStateChange", () => {
       void flushPendingRef.current();
-      if (isActive) {
-        void syncOfflineQueuesRef.current();
-      }
+      void syncOfflineQueuesRef.current();
     }).then((h) => {
       if (cancelled) {
         void h.remove();
@@ -366,6 +510,22 @@ export default function MapApp() {
       void sub?.remove();
     };
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (offlineSyncTimerRef.current) {
+        clearTimeout(offlineSyncTimerRef.current);
+        offlineSyncTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  function scheduleOfflineSync() {
+    if (offlineSyncTimerRef.current) clearTimeout(offlineSyncTimerRef.current);
+    offlineSyncTimerRef.current = setTimeout(() => {
+      void syncOfflineQueuesRef.current();
+    }, GPS_SYNC_DEBOUNCE_MS);
+  }
 
   function scheduleFlushed() {
     // Native + tracking: cell paints accumulate; interval + app lifecycle call flush (saves battery vs 500ms polling).
@@ -586,7 +746,23 @@ export default function MapApp() {
     setMode("browse");
   }
 
-  function applyLocation(lat: number, lng: number) {
+  function addVisitedCellsLocally(cells: string[]) {
+    if (cells.length === 0) return;
+    const next = new Set(visitedCellsRef.current);
+    let changed = false;
+    for (const cell of cells) {
+      if (!next.has(cell)) {
+        next.add(cell);
+        changed = true;
+      }
+    }
+    if (changed) {
+      visitedCellsRef.current = next;
+      setVisitedCells(next);
+    }
+  }
+
+  function applyLocation(lat: number, lng: number, recordedAtMs = Date.now()) {
     if (shouldRecenterMapOnTrackerFixRef.current) {
       shouldRecenterMapOnTrackerFixRef.current = false;
       setTrackerRecenterAt((prev) => ({
@@ -597,14 +773,30 @@ export default function MapApp() {
     }
     setCurrentLocation({ lat, lng });
     const newCell = snapToCell(lat, lng);
+    let cellsToRecord: string[];
 
     if (prevLocationRef.current) {
       // Fill every cell the straight line between the previous and current ping crosses
       const prevCell = snapToCell(prevLocationRef.current.lat, prevLocationRef.current.lng);
-      const pathCells = getCellsAlongLine(prevCell, newCell);
-      pathCells.forEach((cell) => handleCellPaint(cell));
+      cellsToRecord = getCellsAlongLine(prevCell, newCell);
     } else {
-      handleCellPaint(newCell);
+      cellsToRecord = [newCell];
+    }
+
+    cellsToRecord = [...new Set(cellsToRecord)];
+    addVisitedCellsLocally(cellsToRecord);
+    appendOfflineGpsPing(createOfflineGpsPing({
+      lat,
+      lng,
+      cells: cellsToRecord,
+      recordedAtMs,
+    }));
+    refreshOfflineStats();
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      setIsOnline(true);
+      scheduleOfflineSync();
+    } else {
+      setIsOnline(false);
     }
 
     prevLocationRef.current = { lat, lng };
@@ -643,7 +835,7 @@ export default function MapApp() {
           (location: BGLocation | undefined, error: CallbackError | undefined) => {
             if (error || !location) return;
             // Route through ref so we always call the latest applyLocation (M3)
-            applyLocationRef.current(location.latitude, location.longitude);
+            applyLocationRef.current(location.latitude, location.longitude, location.time ?? undefined);
             if (Capacitor.getPlatform() === "android" && typeof location.time === "number") {
               setLastNativeGpsAtMs(location.time);
             }
@@ -679,7 +871,7 @@ export default function MapApp() {
       setFollowTracker(true);
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          applyLocation(pos.coords.latitude, pos.coords.longitude);
+          applyLocation(pos.coords.latitude, pos.coords.longitude, pos.timestamp);
           setIsTracking(true);
           setTrackingDenied(false);
           trackingElapsedRef.current = 0;
@@ -738,6 +930,36 @@ export default function MapApp() {
     }
   }
 
+  async function handleOfflineSyncRequest() {
+    if (offlineSyncBusy) return;
+    setOfflineSyncBusy(true);
+    setOfflineStatus("Checking connection...");
+    try {
+      await flushPendingRef.current();
+      await syncOfflineQueuesRef.current();
+      const loaded = await loadRemoteData(false);
+      const stats = getOfflineQueueStats();
+      setOfflineQueueStats(stats);
+      if (!loaded) {
+        setOfflineStatus("Still offline");
+      } else if (stats.totalQueuedCount > 0) {
+        setOfflineStatus("Saved locally; retrying soon");
+      } else {
+        setOfflineStatus("Synced");
+      }
+    } finally {
+      setOfflineSyncBusy(false);
+    }
+  }
+
+  function handleOfflineTrackToggle() {
+    if (isTracking) {
+      stopTracking();
+    } else {
+      void startTracking();
+    }
+  }
+
   function handleNativeOnboardingClose() {
     setShowNativeOnboarding(false);
     setNativeAutoStartReady(true);
@@ -745,6 +967,7 @@ export default function MapApp() {
 
   function stopTracking() {
     void flushPendingRef.current();
+    void syncOfflineQueuesRef.current();
     isStartingTrackingRef.current = false;
     if (Capacitor.isNativePlatform()) {
       // Capture ID into a local var BEFORE clearing the ref (S2 — avoids null read in async callback)
@@ -777,7 +1000,7 @@ export default function MapApp() {
         trackingElapsedRef.current = 0;
         setTrackingProgress(0);
         navigator.geolocation.getCurrentPosition(
-          (pos) => applyLocation(pos.coords.latitude, pos.coords.longitude),
+          (pos) => applyLocation(pos.coords.latitude, pos.coords.longitude, pos.timestamp),
           () => {} // silent miss, keep going
         );
       } else {
@@ -849,6 +1072,26 @@ export default function MapApp() {
     await fetch(`/api/photos?id=${id}`, { method: "DELETE" });
     setPhotos((prev) => prev.filter((p) => p.id !== id));
     setSelectedPhoto(null);
+  }
+
+  if (Capacitor.isNativePlatform() && !isOnline) {
+    return (
+      <div style={{ position: "relative", width: "100vw", height: "100dvh", overflow: "hidden" }}>
+        {showNativeOnboarding && (
+          <NativeOnboardingModal onClose={handleNativeOnboardingClose} />
+        )}
+        <OfflineModeScreen
+          stats={offlineQueueStats}
+          isTracking={isTracking}
+          trackingDenied={trackingDenied}
+          lastNativeGpsAtMs={Capacitor.getPlatform() === "android" ? lastNativeGpsAtMs : null}
+          status={offlineStatus}
+          isSyncing={offlineSyncBusy}
+          onToggleTracking={handleOfflineTrackToggle}
+          onSync={handleOfflineSyncRequest}
+        />
+      </div>
+    );
   }
 
   return (
@@ -1172,6 +1415,273 @@ export default function MapApp() {
         </div>
       )}
 
+    </div>
+  );
+}
+
+function OfflineModeScreen({
+  stats,
+  isTracking,
+  trackingDenied,
+  lastNativeGpsAtMs,
+  status,
+  isSyncing,
+  onToggleTracking,
+  onSync,
+}: {
+  stats: OfflineQueueStats;
+  isTracking: boolean;
+  trackingDenied: boolean;
+  lastNativeGpsAtMs: number | null;
+  status: string | null;
+  isSyncing: boolean;
+  onToggleTracking: () => void;
+  onSync: () => void;
+}) {
+  const lastSavedLabel = stats.lastRecordedAt
+    ? new Date(stats.lastRecordedAt).toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+    : "None yet";
+  const gpsLabel = lastNativeGpsAtMs
+    ? new Date(lastNativeGpsAtMs).toLocaleTimeString(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+    : null;
+
+  return (
+    <div
+      style={{
+        minHeight: "100dvh",
+        width: "100vw",
+        background: "var(--color-bg)",
+        color: "var(--color-text)",
+        display: "flex",
+        flexDirection: "column",
+        padding: "max(22px, env(safe-area-inset-top)) 18px max(22px, env(safe-area-inset-bottom))",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <Image
+          src="/been-there-long.png"
+          alt="Been There"
+          width={400}
+          height={96}
+          style={{ width: 168, height: "auto", display: "block" }}
+          priority
+        />
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 7,
+            border: "1px solid var(--color-border)",
+            borderRadius: 999,
+            padding: "7px 10px",
+            background: "var(--color-surface)",
+            color: "var(--color-text-muted)",
+            fontSize: 12,
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+          }}
+        >
+          <WifiOff size={15} aria-hidden />
+          Offline
+        </div>
+      </div>
+
+      <main
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          gap: 18,
+          maxWidth: 520,
+          width: "100%",
+          margin: "0 auto",
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 13, color: "var(--color-text-muted)", fontWeight: 600, marginBottom: 8 }}>
+            Saved on this device
+          </div>
+          <h1 style={{ margin: 0, fontSize: 34, lineHeight: 1.08, fontWeight: 750, letterSpacing: 0 }}>
+            Offline tracking
+          </h1>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gap: 8,
+          }}
+        >
+          <OfflineStat
+            icon={<MapPin size={18} aria-hidden />}
+            label="cells"
+            value={stats.gpsUniqueCellCount.toLocaleString()}
+            color="var(--color-teal)"
+          />
+          <OfflineStat
+            icon={<Radio size={18} aria-hidden />}
+            label="pings"
+            value={stats.gpsPingCount.toLocaleString()}
+            color="var(--color-pink)"
+          />
+          <OfflineStat
+            icon={<Clock size={18} aria-hidden />}
+            label="last"
+            value={lastSavedLabel}
+            color="var(--color-orange)"
+            compact
+          />
+        </div>
+
+        {(stats.manualPaintCellCount > 0 || stats.manualEraseCellCount > 0) && (
+          <div
+            style={{
+              border: "1px solid var(--color-border)",
+              borderRadius: 8,
+              padding: "10px 12px",
+              background: "var(--color-surface)",
+              color: "var(--color-text-muted)",
+              fontSize: 12,
+              lineHeight: 1.45,
+            }}
+          >
+            {stats.manualPaintCellCount.toLocaleString()} drawn cells and{" "}
+            {stats.manualEraseCellCount.toLocaleString()} erased cells waiting to sync.
+          </div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <button
+            type="button"
+            onClick={onToggleTracking}
+            style={{
+              minHeight: 52,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              border: "none",
+              borderRadius: 8,
+              background: isTracking ? "#e53e3e" : "var(--color-teal)",
+              color: isTracking ? "white" : "var(--color-text)",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: "pointer",
+              touchAction: "manipulation",
+            }}
+          >
+            {isTracking ? <Square size={17} aria-hidden /> : <Play size={17} aria-hidden />}
+            {isTracking ? "Stop" : trackingDenied ? "Retry" : "Track"}
+          </button>
+          <button
+            type="button"
+            onClick={onSync}
+            disabled={isSyncing}
+            style={{
+              minHeight: 52,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              border: "1px solid var(--color-border)",
+              borderRadius: 8,
+              background: "var(--color-surface)",
+              color: "var(--color-text)",
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: isSyncing ? "default" : "pointer",
+              opacity: isSyncing ? 0.7 : 1,
+              touchAction: "manipulation",
+            }}
+          >
+            <RefreshCw
+              size={17}
+              aria-hidden
+              style={{ animation: isSyncing ? "spin 0.9s linear infinite" : "none" }}
+            />
+            Sync
+          </button>
+        </div>
+
+        <div
+          style={{
+            minHeight: 24,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            color: "var(--color-text-muted)",
+            fontSize: 12,
+            fontWeight: 600,
+          }}
+        >
+          {status === "Synced" ? <CheckCircle2 size={15} color="var(--color-teal)" aria-hidden /> : null}
+          <span>
+            {status ?? (isTracking ? "Recording locally" : "Ready")}
+            {gpsLabel ? ` · Last GPS ${gpsLabel}` : ""}
+          </span>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function OfflineStat({
+  icon,
+  label,
+  value,
+  color,
+  compact = false,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  color: string;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        minHeight: 92,
+        border: "1px solid var(--color-border)",
+        borderRadius: 8,
+        background: "var(--color-surface)",
+        padding: "12px 10px",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        gap: 8,
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ color, lineHeight: 0 }}>{icon}</div>
+      <div>
+        <div
+          style={{
+            color: "var(--color-text)",
+            fontSize: compact ? 15 : 22,
+            lineHeight: 1.05,
+            fontWeight: 750,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {value}
+        </div>
+        <div style={{ marginTop: 3, color: "var(--color-text-muted)", fontSize: 11, fontWeight: 600 }}>
+          {label}
+        </div>
+      </div>
     </div>
   );
 }

@@ -2,10 +2,47 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase-server";
 import { resolutionForZoom } from "@/lib/h3";
 import { aggregateVisitRows, type VisitMetricRow } from "@/lib/cell-metrics";
-import { applyVisitCellsBatch } from "@/lib/visit-cells-batch";
+import {
+  applyVisitCellsBatch,
+  applyVisitEventsBatch,
+  type VisitCellEvent,
+} from "@/lib/visit-cells-batch";
 
 /** Matches PostgREST default max rows; fetch in pages so we return the full set in one response. */
 const VISIT_CELLS_PAGE_SIZE = 1000;
+const MAX_VISIT_EVENTS_PER_REQUEST = 5000;
+
+function normalizeVisitEvents(input: unknown): VisitCellEvent[] {
+  if (!Array.isArray(input)) return [];
+  const events: VisitCellEvent[] = [];
+
+  for (const item of input) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const clientEventId = record.clientEventId ?? record.client_event_id;
+    const h3Index = record.h3Index ?? record.h3_index ?? record.cell;
+    const visitedAt = record.visitedAt ?? record.visited_at;
+
+    if (
+      typeof clientEventId !== "string" ||
+      typeof h3Index !== "string" ||
+      typeof visitedAt !== "string"
+    ) {
+      continue;
+    }
+
+    const visitedAtMs = Date.parse(visitedAt);
+    if (Number.isNaN(visitedAtMs)) continue;
+
+    events.push({
+      clientEventId,
+      h3Index,
+      visitedAt: new Date(visitedAtMs).toISOString(),
+    });
+  }
+
+  return events.slice(0, MAX_VISIT_EVENTS_PER_REQUEST);
+}
 
 /**
  * GET /api/cells?zoom=<n>
@@ -81,10 +118,8 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/cells
- * Body: { cells: string[] }
- * Records visits: visit_count increments only when the cell differs from the user's
- * current most-recent last_visited_at cell; revisits to that cell refresh last_visited_at only.
- * Implemented in Node (see lib/visit-cells-batch) — migrations stay table-only.
+ * Body: { cells: string[] } or { visits: VisitCellEvent[] }
+ * Records ordered visits. Stable visit clientEventIds make offline replay idempotent.
  */
 export async function POST(request: NextRequest) {
   const supabase = await createServerClient();
@@ -92,6 +127,24 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await request.json();
+  const visits = normalizeVisitEvents(body.visits);
+  if (Array.isArray(body.visits)) {
+    if (visits.length === 0) {
+      return NextResponse.json({ error: "No valid visits provided" }, { status: 400 });
+    }
+
+    const result = await applyVisitEventsBatch(supabase, visits);
+    if (!result.ok) {
+      return NextResponse.json({ error: result.message }, { status: 500 });
+    }
+    return NextResponse.json({
+      ok: true,
+      count: visits.length,
+      applied: result.applied,
+      duplicates: result.duplicates,
+    });
+  }
+
   const cells: string[] = body.cells ?? [];
   if (!Array.isArray(cells) || cells.length === 0) {
     return NextResponse.json({ error: "No cells provided" }, { status: 400 });
@@ -108,7 +161,12 @@ export async function POST(request: NextRequest) {
   if (!result.ok) {
     return NextResponse.json({ error: result.message }, { status: 500 });
   }
-  return NextResponse.json({ ok: true, count: unique.length });
+  return NextResponse.json({
+    ok: true,
+    count: unique.length,
+    applied: result.applied,
+    duplicates: result.duplicates,
+  });
 }
 
 /**
