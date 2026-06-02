@@ -15,6 +15,23 @@ import type { MapMode } from "./MapApp";
 const STADIA_STYLE =
   "https://tiles.stadiamaps.com/styles/alidade_smooth.json";
 
+function initialMapStyle(): string | maplibregl.StyleSpecification {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return {
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "offline-background",
+          type: "background",
+          paint: { "background-color": "#f5f0e8" },
+        },
+      ],
+    };
+  }
+  return STADIA_STYLE;
+}
+
 interface Props {
   mode: MapMode;
   visitedCells: Set<string>;
@@ -406,7 +423,7 @@ export default function Map({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: STADIA_STYLE,
+      style: initialMapStyle(),
       center: [-122.4194, 37.7749],
       zoom: 13,
     });

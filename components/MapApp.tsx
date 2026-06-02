@@ -55,6 +55,7 @@ import {
 const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>("BackgroundGeolocation");
 const OfflineHandoff = registerPlugin<{
   getPendingPayload: () => Promise<{ payload?: string | null }>;
+  markRemoteAppLoaded: () => Promise<void>;
 }>("OfflineHandoff");
 
 /** Native background tracking: fewer GPS wakeups (larger = less frequent fixes, better battery). */
@@ -130,6 +131,47 @@ const EMPTY_OFFLINE_STATS: OfflineQueueStats = {
   lastRecordedAt: null,
 };
 
+const OFFLINE_APP_SNAPSHOT_KEY = "bt_offline_app_snapshot_v1";
+
+type OfflineAppSnapshot = {
+  cells: string[];
+  photos: PhotoPin[];
+  cellMetrics: VisitMetricRow[];
+  recentCell: string | null;
+  savedAt: string;
+};
+
+function readOfflineAppSnapshot(): OfflineAppSnapshot | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(OFFLINE_APP_SNAPSHOT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<OfflineAppSnapshot>;
+    if (!Array.isArray(parsed.cells)) return null;
+    return {
+      cells: parsed.cells.filter((cell): cell is string => typeof cell === "string"),
+      photos: Array.isArray(parsed.photos) ? (parsed.photos as PhotoPin[]) : [],
+      cellMetrics: Array.isArray(parsed.cellMetrics) ? (parsed.cellMetrics as VisitMetricRow[]) : [],
+      recentCell: typeof parsed.recentCell === "string" ? parsed.recentCell : null,
+      savedAt: typeof parsed.savedAt === "string" ? parsed.savedAt : new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeOfflineAppSnapshot(snapshot: Omit<OfflineAppSnapshot, "savedAt">): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(
+      OFFLINE_APP_SNAPSHOT_KEY,
+      JSON.stringify({ ...snapshot, savedAt: new Date().toISOString() })
+    );
+  } catch {
+    /* Cache is best-effort; offline GPS persistence is handled separately. */
+  }
+}
+
 export default function MapApp() {
   // Map state
   const [mode, setMode] = useState<MapMode>("browse");
@@ -143,6 +185,7 @@ export default function MapApp() {
   const [offlineQueueStats, setOfflineQueueStats] = useState<OfflineQueueStats>(() => (
     typeof window === "undefined" ? EMPTY_OFFLINE_STATS : getOfflineQueueStats()
   ));
+  const [hasCachedAppSnapshot, setHasCachedAppSnapshot] = useState(() => readOfflineAppSnapshot() !== null);
   const [offlineStatus, setOfflineStatus] = useState<string | null>(null);
   const [offlineSyncBusy, setOfflineSyncBusy] = useState(false);
 
@@ -238,31 +281,42 @@ export default function MapApp() {
       ]);
       const cellsData = await cellsRes.json();
       const photosData = await photosRes.json();
+      const remoteCells = Array.isArray(cellsData.cells) ? (cellsData.cells as string[]) : [];
+      const remotePhotos = !photosData.error && Array.isArray(photosData.photos)
+        ? (photosData.photos as PhotoPin[])
+        : [];
+      const remoteMetrics = Array.isArray(cellsData.cellMetrics)
+        ? (cellsData.cellMetrics as VisitMetricRow[])
+        : [];
       if (cellsData.error) {
         console.error("cells load error:", cellsData.error);
         if (cellsData.error.includes("relation") || cellsData.error.includes("path")) {
           setLoadError("Database tables not found. Run the migration SQL in Supabase first.");
         }
       } else if (cellsData.cells) {
-        const serverSet = new Set<string>(cellsData.cells as string[]);
+        const serverSet = new Set<string>(remoteCells);
         const merged = mergeLocalQueuedCells(serverSet);
         visitedCellsRef.current = merged;
         setVisitedCells(merged);
-        const metrics = Array.isArray(cellsData.cellMetrics)
-          ? (cellsData.cellMetrics as VisitMetricRow[])
-          : [];
-        if (metrics.length > 0) {
-          setCellMetricsRes9(metrics);
+        if (remoteMetrics.length > 0) {
+          setCellMetricsRes9(remoteMetrics);
         }
         const initial = resolveInitialCenter(
           (cellsData.recentCell as string | null) ?? null,
-          metrics,
+          remoteMetrics,
           getLatestOfflineGpsVisit()
         );
         if (initial) setInitialCenter(initial);
+        writeOfflineAppSnapshot({
+          cells: remoteCells,
+          photos: remotePhotos,
+          cellMetrics: remoteMetrics,
+          recentCell: (cellsData.recentCell as string | null) ?? null,
+        });
+        setHasCachedAppSnapshot(true);
       }
       if (!photosData.error && photosData.photos) {
-        setPhotos(photosData.photos);
+        setPhotos(remotePhotos);
       }
       setIsOnline(true);
       refreshOfflineStats();
@@ -270,11 +324,28 @@ export default function MapApp() {
     } catch (e) {
       console.error("Failed to load map data:", e);
       if (Capacitor.isNativePlatform()) {
-        const localCells = getLocalQueuedVisitedCells();
-        visitedCellsRef.current = localCells;
-        setVisitedCells(localCells);
-        const latest = getLatestOfflineGpsVisit();
-        if (latest) setInitialCenter(cellToCenter(latest.h3));
+        const snapshot = readOfflineAppSnapshot();
+        if (snapshot) {
+          const merged = mergeLocalQueuedCells(new Set(snapshot.cells));
+          visitedCellsRef.current = merged;
+          setVisitedCells(merged);
+          setPhotos(snapshot.photos);
+          setCellMetricsRes9(snapshot.cellMetrics);
+          const initial = resolveInitialCenter(
+            snapshot.recentCell,
+            snapshot.cellMetrics,
+            getLatestOfflineGpsVisit()
+          );
+          if (initial) setInitialCenter(initial);
+          setHasCachedAppSnapshot(true);
+        } else {
+          const localCells = getLocalQueuedVisitedCells();
+          visitedCellsRef.current = localCells;
+          setVisitedCells(localCells);
+          const latest = getLatestOfflineGpsVisit();
+          if (latest) setInitialCenter(cellToCenter(latest.h3));
+          setHasCachedAppSnapshot(false);
+        }
         setIsOnline(false);
       }
       refreshOfflineStats();
@@ -298,6 +369,12 @@ export default function MapApp() {
           }
         } catch {
           /* Native handoff plugin is Android-only and best-effort. */
+        }
+
+        try {
+          await OfflineHandoff.markRemoteAppLoaded();
+        } catch {
+          /* Marker is best-effort; offline mode still works without it. */
         }
       }
 
@@ -1100,7 +1177,7 @@ export default function MapApp() {
     setSelectedPhoto(null);
   }
 
-  if (Capacitor.isNativePlatform() && !isOnline) {
+  if (Capacitor.isNativePlatform() && !isOnline && !hasCachedAppSnapshot) {
     return (
       <div style={{ position: "relative", width: "100vw", height: "100dvh", overflow: "hidden" }}>
         {showNativeOnboarding && (
@@ -1569,22 +1646,31 @@ function OfflineModeScreen({
           />
         </div>
 
-        {(stats.manualPaintCellCount > 0 || stats.manualEraseCellCount > 0) && (
-          <div
-            style={{
-              border: "1px solid var(--color-border)",
-              borderRadius: 8,
-              padding: "10px 12px",
-              background: "var(--color-surface)",
-              color: "var(--color-text-muted)",
-              fontSize: 12,
-              lineHeight: 1.45,
-            }}
-          >
-            {stats.manualPaintCellCount.toLocaleString()} drawn cells and{" "}
-            {stats.manualEraseCellCount.toLocaleString()} erased cells waiting to sync.
+        <div
+          style={{
+            border: "1px solid var(--color-border)",
+            borderRadius: 8,
+            padding: "10px 12px",
+            background: "var(--color-surface)",
+            color: "var(--color-text-muted)",
+            fontSize: 12,
+            lineHeight: 1.45,
+            fontWeight: 600,
+          }}
+        >
+          <div>
+            Total waiting: <strong>{stats.totalQueuedCount.toLocaleString()}</strong>
           </div>
-        )}
+          <div>
+            GPS events: <strong>{stats.gpsVisitEventCount.toLocaleString()}</strong>
+          </div>
+          {(stats.manualPaintCellCount > 0 || stats.manualEraseCellCount > 0) && (
+            <div>
+              Manual edits: <strong>{stats.manualPaintCellCount.toLocaleString()}</strong> drawn,{" "}
+              <strong>{stats.manualEraseCellCount.toLocaleString()}</strong> erased
+            </div>
+          )}
+        </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <button

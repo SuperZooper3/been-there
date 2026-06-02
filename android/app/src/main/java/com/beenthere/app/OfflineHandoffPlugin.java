@@ -14,6 +14,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 public class OfflineHandoffPlugin extends Plugin {
     private static final String PREFS_NAME = "BeenThereOfflineHandoff";
     private static final String PAYLOAD_KEY = "pendingPayload";
+    private static final String REMOTE_APP_LOADED_KEY = "remoteAppLoaded";
 
     @PluginMethod
     public void openRemoteApp(PluginCall call) {
@@ -39,6 +40,21 @@ public class OfflineHandoffPlugin extends Plugin {
 
         JSObject result = new JSObject();
         result.put("payload", payload);
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void markRemoteAppLoaded(PluginCall call) {
+        SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putBoolean(REMOTE_APP_LOADED_KEY, true).apply();
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void hasRemoteAppLoaded(PluginCall call) {
+        SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        JSObject result = new JSObject();
+        result.put("loaded", prefs.getBoolean(REMOTE_APP_LOADED_KEY, false));
         call.resolve(result);
     }
 }

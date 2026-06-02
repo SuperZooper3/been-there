@@ -15181,7 +15181,8 @@
   }
 
 	  // offline-shell/entry.ts
-	  var REMOTE_ORIGIN = true ? "https://been-there-maps.vercel.app" : "https://been-there-maps.vercel.app";
+		  var REMOTE_ORIGIN = true ? "https://been-there-maps.vercel.app" : "https://been-there-maps.vercel.app";
+		  var REMOTE_LOAD_FAILED = window.location.hash.includes("remote-load-failed");
 	  var BackgroundGeolocation = registerPlugin("BackgroundGeolocation");
 	  var OfflineHandoff = registerPlugin("OfflineHandoff");
 	  var NATIVE_DISTANCE_FILTER_M = 48;
@@ -15251,6 +15252,14 @@
 	      window.location.replace(`${REMOTE_ORIGIN}/`);
 	    }
 	  }
+	  async function hasRemoteAppLoaded() {
+	    try {
+	      const result = await OfflineHandoff.hasRemoteAppLoaded();
+	      return result?.loaded === true;
+	    } catch {
+	      return false;
+	    }
+	  }
 	  var watcherId = null;
 	  var prev = { lat: null, lng: null };
 	  var persistTimer = null;
@@ -15274,8 +15283,15 @@
 	    if (ping) {
 	      el("lastPing").textContent = `${ping.lat.toFixed(5)}, ${ping.lng.toFixed(5)} \xB7 ${ping.h3.slice(0, 12)}\u2026`;
 	      el("lastGpsTime").textContent = fmtTime(ping.atMs);
+	      el("lastGpsStat").textContent = fmtTime(ping.atMs);
+	    } else {
+	      el("lastPing").textContent = "none yet";
+	      el("lastGpsTime").textContent = "none yet";
+	      el("lastGpsStat").textContent = "None yet";
 	    }
-	    el("btnToggleTracking").textContent = watcherId ? "Stop tracking" : "Start tracking";
+	    const trackButton = el("btnToggleTracking");
+	    trackButton.textContent = watcherId ? "Stop" : "Track";
+	    trackButton.classList.toggle("is-stopping", Boolean(watcherId));
 	  }
 	  async function applyLocation(lat, lng, recordedAtMs = Date.now()) {
 	    const newCell = snapToCell(lat, lng);
@@ -15330,7 +15346,7 @@
 	    prev = { lat: null, lng: null };
 	    await refreshUi();
 	  }
-	  async function tryRedirectToFullApp() {
+	  async function tryRedirectToFullApp({ allowCached = false } = {}) {
 	    el("status").textContent = "Checking connection\u2026";
 	    const ok = await probeReachable(REMOTE_ORIGIN, 5e3);
 	    if (ok) {
@@ -15338,20 +15354,26 @@
 	      await openFullApp();
 	      return true;
 	    }
-    return false;
-  }
+	    if (allowCached) {
+	      el("status").textContent = "Opening saved app\u2026";
+	      await openFullApp();
+	      return true;
+	    }
+	    return false;
+	  }
   async function main() {
     el("remoteOrigin").textContent = REMOTE_ORIGIN;
     if (!Capacitor.isNativePlatform()) {
       el("status").textContent = "Redirecting to web\u2026";
       window.location.replace(`${REMOTE_ORIGIN}/`);
       return;
-    }
-    await ensureOfflineBufferReady();
-    await refreshUi();
-    if (await tryRedirectToFullApp()) return;
-    el("offlinePanel").style.display = "block";
-    el("status").textContent = "Offline \u2014 recording visits on device. Open the full app when online to sync to your account.";
+	    }
+	    await ensureOfflineBufferReady();
+	    await refreshUi();
+		    const canTryCachedApp = !REMOTE_LOAD_FAILED && await hasRemoteAppLoaded();
+	    if (await tryRedirectToFullApp({ allowCached: canTryCachedApp })) return;
+	    el("offlinePanel").style.display = "block";
+	    el("status").textContent = "Offline \u2014 recording visits on this device.";
     void App.addListener("appStateChange", ({ isActive }) => {
       if (isActive) void tryRedirectToFullApp();
     });
@@ -15363,7 +15385,8 @@
 	      void openFullApp();
 	    });
 	    el("btnRetry").addEventListener("click", async () => {
-	      if (await tryRedirectToFullApp()) return;
+		      const canTryCachedApp = !REMOTE_LOAD_FAILED && await hasRemoteAppLoaded();
+		      if (await tryRedirectToFullApp({ allowCached: canTryCachedApp })) return;
 	      el("status").textContent = "Still offline \u2014 visits are saved locally.";
 	    });
 	    el("btnToggleTracking").addEventListener("click", async () => {

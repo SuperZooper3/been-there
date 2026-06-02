@@ -13,6 +13,7 @@
 /out/*
 !/out/index.html
 !/out/shell.js
+!/out/been-there-long.png
 
 # production
 /build

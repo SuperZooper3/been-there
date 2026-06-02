@@ -17,6 +17,7 @@ public class MainActivity extends BridgeActivity {
         if (getIntent() != null && getIntent().getBooleanExtra(EXTRA_FORCE_REMOTE, false)) {
             config = new CapConfig.Builder(this)
                 .setServerUrl(REMOTE_URL)
+                .setErrorPath("index.html#remote-load-failed")
                 .setAllowNavigation(new String[] { "been-there-maps.vercel.app" })
                 .setUseLegacyBridge(true)
                 .create();

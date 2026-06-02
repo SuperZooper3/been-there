@@ -52,15 +52,20 @@
       }
 
       .brand {
-        font-size: 25px;
-        line-height: 1;
-        font-weight: 800;
-        letter-spacing: 0;
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .brand img {
+        width: 168px;
+        height: auto;
+        display: block;
       }
 
       .pill {
         display: inline-flex;
         align-items: center;
+        gap: 7px;
         border: 1px solid var(--color-border);
         border-radius: 999px;
         padding: 7px 10px;
@@ -69,6 +74,11 @@
         font-size: 12px;
         font-weight: 700;
         white-space: nowrap;
+      }
+
+      .pill svg {
+        width: 15px;
+        height: 15px;
       }
 
       main {
@@ -195,6 +205,11 @@
         background: var(--color-teal);
       }
 
+      #btnToggleTracking.is-stopping {
+        background: #e53e3e;
+        color: white;
+      }
+
       #offlinePanel {
         display: none;
       }
@@ -207,8 +222,19 @@
   <body>
     <div class="shell">
       <header class="top">
-        <div class="brand">Been There</div>
-        <div class="pill">Offline</div>
+        <div class="brand">
+          <img src="./been-there-long.png" alt="Been There" />
+        </div>
+        <div class="pill">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h.01" />
+            <path d="M8.5 16.5a5 5 0 0 1 7 0" />
+            <path d="M5 13a10 10 0 0 1 9.2-2.8" />
+            <path d="M1.5 9a15 15 0 0 1 18.1-1.7" />
+            <path d="m2 2 20 20" />
+          </svg>
+          Offline
+        </div>
       </header>
 
       <main>
@@ -238,22 +264,23 @@
             <div class="stat">
               <div class="mark orange"></div>
               <div>
-                <div class="value" id="eventCount">0</div>
-                <div class="label">events</div>
+                <div class="value" id="lastGpsStat">None yet</div>
+                <div class="label">last</div>
               </div>
             </div>
           </div>
 
           <div class="detail">
             <div>Total waiting: <strong id="unsynced">0</strong></div>
-            <div>Last GPS: <strong id="lastGpsTime">none yet</strong></div>
+            <div>GPS events: <strong id="eventCount">0</strong></div>
             <div>Last point: <strong id="lastPing">none yet</strong></div>
+            <div class="hidden">Last GPS: <strong id="lastGpsTime">none yet</strong></div>
             <div class="hidden">Last sync: <strong id="lastSync">-</strong></div>
           </div>
 
           <div class="actions">
-            <button type="button" id="btnToggleTracking">Start tracking</button>
-            <button type="button" id="btnRetry">Check / sync</button>
+            <button type="button" id="btnToggleTracking">Track</button>
+            <button type="button" id="btnRetry">Sync</button>
           </div>
           <button type="button" id="btnOpenApp" class="hidden">Open full app</button>
         </section>
