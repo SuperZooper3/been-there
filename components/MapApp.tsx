@@ -33,6 +33,7 @@ import {
   getOfflinePaintQueue,
   getOfflineEraseQueue,
   getOfflineQueueStats,
+  importOfflineTransferFromWindowName,
   offlineGpsPingsToVisitEvents,
   removeOfflineGpsPings,
   removeFromOfflinePaintQueue,
@@ -281,8 +282,11 @@ export default function MapApp() {
 
   // Initial data load
   useEffect(() => {
+    if (importOfflineTransferFromWindowName()) {
+      refreshOfflineStats();
+    }
     void loadRemoteData(true);
-  }, [loadRemoteData]);
+  }, [loadRemoteData, refreshOfflineStats]);
 
   // First launch on native shell: explain notifications + battery before tracking starts.
   useEffect(() => {

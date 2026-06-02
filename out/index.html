@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#f5f0e8" />
+    <title>Been There</title>
+    <style>
+      :root {
+        --color-bg: #f5f0e8;
+        --color-surface: #faf7f2;
+        --color-border: #e8e0d0;
+        --color-text: #3d3530;
+        --color-text-muted: #8c7b6e;
+        --color-teal: #7ec8c8;
+        --color-pink: #f0a0b0;
+        --color-orange: #f0b878;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--color-bg);
+        color: var(--color-text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body {
+        min-height: 100dvh;
+        padding: max(22px, env(safe-area-inset-top)) 18px max(22px, env(safe-area-inset-bottom));
+      }
+
+      .shell {
+        min-height: calc(100dvh - max(22px, env(safe-area-inset-top)) - max(22px, env(safe-area-inset-bottom)));
+        display: flex;
+        flex-direction: column;
+      }
+
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .brand {
+        font-size: 25px;
+        line-height: 1;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--color-border);
+        border-radius: 999px;
+        padding: 7px 10px;
+        background: var(--color-surface);
+        color: var(--color-text-muted);
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      main {
+        width: 100%;
+        max-width: 520px;
+        margin: 0 auto;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 18px;
+      }
+
+      .eyebrow {
+        margin-bottom: 8px;
+        color: var(--color-text-muted);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 34px;
+        line-height: 1.08;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      #status {
+        min-height: 20px;
+        margin: 0;
+        color: var(--color-text-muted);
+        font-size: 13px;
+        line-height: 1.45;
+        font-weight: 600;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .stat {
+        min-height: 92px;
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        background: var(--color-surface);
+        padding: 12px 10px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 8px;
+        overflow: hidden;
+      }
+
+      .mark {
+        width: 18px;
+        height: 18px;
+        border-radius: 999px;
+      }
+
+      .mark.teal {
+        background: var(--color-teal);
+      }
+
+      .mark.pink {
+        background: var(--color-pink);
+      }
+
+      .mark.orange {
+        background: var(--color-orange);
+      }
+
+      .value {
+        color: var(--color-text);
+        font-size: 22px;
+        line-height: 1.05;
+        font-weight: 800;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .label {
+        margin-top: 3px;
+        color: var(--color-text-muted);
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .detail {
+        border: 1px solid var(--color-border);
+        border-radius: 8px;
+        background: var(--color-surface);
+        padding: 11px 12px;
+        color: var(--color-text-muted);
+        font-size: 12px;
+        line-height: 1.45;
+        font-weight: 600;
+      }
+
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      button {
+        min-height: 52px;
+        border-radius: 8px;
+        border: 1px solid var(--color-border);
+        background: var(--color-surface);
+        color: var(--color-text);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 800;
+        cursor: pointer;
+        touch-action: manipulation;
+      }
+
+      #btnToggleTracking {
+        border: none;
+        background: var(--color-teal);
+      }
+
+      #offlinePanel {
+        display: none;
+      }
+
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="top">
+        <div class="brand">Been There</div>
+        <div class="pill">Offline</div>
+      </header>
+
+      <main>
+        <section>
+          <div class="eyebrow">Saved on this phone</div>
+          <h1>Offline tracking</h1>
+        </section>
+
+        <p id="status">Starting...</p>
+
+        <section id="offlinePanel">
+          <div class="stats">
+            <div class="stat">
+              <div class="mark teal"></div>
+              <div>
+                <div class="value" id="cellCount">0</div>
+                <div class="label">cells</div>
+              </div>
+            </div>
+            <div class="stat">
+              <div class="mark pink"></div>
+              <div>
+                <div class="value" id="pingCount">0</div>
+                <div class="label">pings</div>
+              </div>
+            </div>
+            <div class="stat">
+              <div class="mark orange"></div>
+              <div>
+                <div class="value" id="eventCount">0</div>
+                <div class="label">events</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="detail">
+            <div>Total waiting: <strong id="unsynced">0</strong></div>
+            <div>Last GPS: <strong id="lastGpsTime">none yet</strong></div>
+            <div>Last point: <strong id="lastPing">none yet</strong></div>
+            <div class="hidden">Last sync: <strong id="lastSync">-</strong></div>
+          </div>
+
+          <div class="actions">
+            <button type="button" id="btnToggleTracking">Start tracking</button>
+            <button type="button" id="btnRetry">Check / sync</button>
+          </div>
+          <button type="button" id="btnOpenApp" class="hidden">Open full app</button>
+        </section>
+
+        <span id="remoteOrigin" class="hidden"></span>
+      </main>
+    </div>
+    <script src="./shell.js"></script>
+  </body>
+</html>

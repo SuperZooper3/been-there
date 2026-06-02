@@ -10,6 +10,7 @@
 const PAINT_KEY = 'bt_offline_paint';
 const ERASE_KEY = 'bt_offline_erase';
 const GPS_PINGS_KEY = 'bt_offline_gps_pings_v1';
+const OFFLINE_TRANSFER_PREFIX = 'bt-offline-transfer-v1:';
 
 export interface OfflineGpsPing {
   id: string;
@@ -33,6 +34,23 @@ export interface OfflineQueueStats {
   manualEraseCellCount: number;
   totalQueuedCount: number;
   lastRecordedAt: string | null;
+}
+
+interface LegacyVisitBatch {
+  clientBatchId?: string;
+  events?: Array<{
+    op?: string;
+    h3?: string;
+    t?: string;
+  }>;
+}
+
+interface OfflineTransferPayload {
+  gpsPings?: unknown;
+  paints?: unknown;
+  erases?: unknown;
+  visitBatches?: unknown;
+  openBatch?: unknown;
 }
 
 function readQueue(key: string): string[] {
@@ -112,6 +130,64 @@ function writeGpsPings(pings: OfflineGpsPing[]): boolean {
   } catch {
     return false;
   }
+}
+
+function normalizeGpsPing(item: unknown): OfflineGpsPing | null {
+  if (!item || typeof item !== 'object') return null;
+  const record = item as Record<string, unknown>;
+  if (
+    typeof record.id !== 'string' ||
+    typeof record.recordedAt !== 'string' ||
+    typeof record.lat !== 'number' ||
+    !Number.isFinite(record.lat) ||
+    typeof record.lng !== 'number' ||
+    !Number.isFinite(record.lng) ||
+    !Array.isArray(record.cells)
+  ) {
+    return null;
+  }
+  const cells: string[] = record.cells.filter((cell: unknown): cell is string => typeof cell === 'string');
+  if (cells.length === 0) return null;
+  return {
+    id: record.id,
+    recordedAt: record.recordedAt,
+    lat: record.lat,
+    lng: record.lng,
+    cells: [...new Set<string>(cells)],
+  };
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+}
+
+function legacyBatchesToGpsPings(value: unknown): OfflineGpsPing[] {
+  if (!Array.isArray(value)) return [];
+  const pings: OfflineGpsPing[] = [];
+
+  value.forEach((batch: LegacyVisitBatch, batchIndex) => {
+    const batchId = typeof batch?.clientBatchId === 'string'
+      ? batch.clientBatchId
+      : `legacy-batch-${batchIndex}`;
+    const events = Array.isArray(batch?.events) ? batch.events : [];
+    events.forEach((event, eventIndex) => {
+      if (event?.op !== 'paint' || typeof event.h3 !== 'string') return;
+      const visitedAt = typeof event.t === 'string' && !Number.isNaN(Date.parse(event.t))
+        ? new Date(Date.parse(event.t)).toISOString()
+        : new Date().toISOString();
+      pings.push({
+        id: `legacy:${batchId}:${eventIndex}`,
+        recordedAt: visitedAt,
+        lat: 0,
+        lng: 0,
+        cells: [event.h3],
+      });
+    });
+  });
+
+  return pings;
 }
 
 export function getOfflinePaintQueue(): string[] {
@@ -203,6 +279,60 @@ export function removeOfflineGpsPings(ids: string[]): void {
     localStorage.removeItem(GPS_PINGS_KEY);
   } else {
     writeGpsPings(remaining);
+  }
+}
+
+export function importOfflineTransferPayload(payload: OfflineTransferPayload): boolean {
+  const paints = normalizeStringArray(payload.paints);
+  const incomingPings = [
+    ...(Array.isArray(payload.gpsPings)
+      ? payload.gpsPings
+          .map(normalizeGpsPing)
+          .filter((ping): ping is OfflineGpsPing => ping !== null)
+      : []),
+    ...legacyBatchesToGpsPings(payload.visitBatches),
+    ...legacyBatchesToGpsPings(Array.isArray(payload.openBatch) ? payload.openBatch : [payload.openBatch]),
+  ];
+  const erases = normalizeStringArray(payload.erases);
+
+  let changed = false;
+  if (incomingPings.length > 0) {
+    const existing = readGpsPings();
+    const byId = new Map(existing.map((ping) => [ping.id, ping] as [string, OfflineGpsPing]));
+    for (const ping of incomingPings) {
+      if (!byId.has(ping.id)) {
+        byId.set(ping.id, ping);
+        changed = true;
+      }
+    }
+    if (changed) writeGpsPings([...byId.values()]);
+  }
+
+  if (paints.length > 0) {
+    appendOfflinePaintQueue(paints);
+    changed = true;
+  }
+
+  if (erases.length > 0) {
+    appendOfflineEraseQueue(erases);
+    changed = true;
+  }
+
+  return changed;
+}
+
+export function importOfflineTransferFromWindowName(): boolean {
+  if (typeof window === 'undefined') return false;
+  const raw = window.name;
+  if (typeof raw !== 'string' || !raw.startsWith(OFFLINE_TRANSFER_PREFIX)) return false;
+
+  try {
+    const payload = JSON.parse(raw.slice(OFFLINE_TRANSFER_PREFIX.length)) as OfflineTransferPayload;
+    const changed = importOfflineTransferPayload(payload);
+    window.name = '';
+    return changed;
+  } catch {
+    return false;
   }
 }
 
