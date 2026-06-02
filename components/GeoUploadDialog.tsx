@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 import { readImageGps } from "@/lib/read-image-gps";
 
@@ -10,6 +10,33 @@ type Stage =
   | { type: "loading" }
   | { type: "geolocated"; file: File; preview: string; lat: number; lng: number }
   | { type: "no-gps"; file: File; preview: string };
+
+type PickedNativePhoto = {
+  path: string;
+  name?: string;
+  mimeType?: string;
+  lat?: number;
+  lng?: number;
+};
+
+const NativePhotoPicker = registerPlugin<{
+  pickPhoto: () => Promise<PickedNativePhoto>;
+}>("NativePhotoPicker");
+
+function normalizeCoords(lat: unknown, lng: unknown): { lat: number; lng: number } | undefined {
+  if (
+    typeof lat === "number" &&
+    typeof lng === "number" &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180 &&
+    !(lat === 0 && lng === 0)
+  ) {
+    return { lat, lng };
+  }
+  return undefined;
+}
 
 interface Props {
   onSave: (file: File, lat: number, lng: number, caption: string) => void | Promise<void>;
@@ -33,8 +60,10 @@ export default function GeoUploadDialog({
   const [submitting, setSubmitting] = useState(false);
   const [geolocating, setGeolocating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const nativePickingRef = useRef(false);
 
   const isNative = Capacitor.isNativePlatform();
+  const useNativePhotoPicker = Capacitor.getPlatform() === "android" && Capacitor.isPluginAvailable("NativePhotoPicker");
 
   async function handleUseCurrentLocation() {
     if (stage.type !== "no-gps") return;
@@ -57,15 +86,63 @@ export default function GeoUploadDialog({
 
   // Auto-open file picker when the dialog first mounts
   useEffect(() => {
-    const timer = setTimeout(() => inputRef.current?.click(), 80);
+    const timer = setTimeout(() => {
+      if (useNativePhotoPicker) {
+        void openNativePhotoPicker();
+      } else {
+        inputRef.current?.click();
+      }
+    }, 80);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function processFile(file: File) {
+  async function nativePhotoToFile(photo: PickedNativePhoto): Promise<File> {
+    const webPath = Capacitor.convertFileSrc(photo.path);
+    const res = await fetch(webPath);
+    if (!res.ok) {
+      throw new Error("Could not read native photo file.");
+    }
+    const blob = await res.blob();
+    const type = photo.mimeType || blob.type || "image/jpeg";
+    const name = photo.name || (type === "image/png" ? "photo.png" : "photo.jpg");
+    return new File([blob], name, { type, lastModified: Date.now() });
+  }
+
+  async function openNativePhotoPicker() {
+    if (nativePickingRef.current) return;
+    nativePickingRef.current = true;
+    onClearUploadWarning?.();
+    setStage({ type: "loading" });
+    try {
+      const picked = await NativePhotoPicker.pickPhoto();
+      const file = await nativePhotoToFile(picked);
+      const coords = normalizeCoords(picked.lat, picked.lng);
+      await processFile(file, coords);
+    } catch {
+      setStage((current) => (current.type === "loading" ? { type: "idle" } : current));
+    } finally {
+      nativePickingRef.current = false;
+    }
+  }
+
+  function choosePhoto() {
+    if (useNativePhotoPicker) {
+      void openNativePhotoPicker();
+    } else {
+      inputRef.current?.click();
+    }
+  }
+
+  async function processFile(file: File, knownGps?: { lat: number; lng: number }) {
     onClearUploadWarning?.();
     setStage({ type: "loading" });
     const preview = URL.createObjectURL(file);
     try {
+      if (knownGps) {
+        setStage({ type: "geolocated", file, preview, lat: knownGps.lat, lng: knownGps.lng });
+        return;
+      }
       const coords = await readImageGps(file);
       if (coords) {
         setStage({ type: "geolocated", file, preview, lat: coords.lat, lng: coords.lng });
@@ -144,10 +221,10 @@ export default function GeoUploadDialog({
 
         {/* Drop zone / preview */}
         <div
-          onClick={() => stage.type !== "loading" && inputRef.current?.click()}
-          onDragOver={stage.type !== "loading" ? handleDragOver : undefined}
-          onDragLeave={stage.type !== "loading" ? handleDragLeave : undefined}
-          onDrop={stage.type !== "loading" ? handleDrop : undefined}
+          onClick={() => stage.type !== "loading" && choosePhoto()}
+          onDragOver={!useNativePhotoPicker && stage.type !== "loading" ? handleDragOver : undefined}
+          onDragLeave={!useNativePhotoPicker && stage.type !== "loading" ? handleDragLeave : undefined}
+          onDrop={!useNativePhotoPicker && stage.type !== "loading" ? handleDrop : undefined}
           style={{
             width: "100%",
             aspectRatio: "1 / 1",

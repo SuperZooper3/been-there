@@ -12,6 +12,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(OfflineHandoffPlugin.class);
+        registerPlugin(NativePhotoPickerPlugin.class);
 
         if (getIntent() != null && getIntent().getBooleanExtra(EXTRA_FORCE_REMOTE, false)) {
             config = new CapConfig.Builder(this)
