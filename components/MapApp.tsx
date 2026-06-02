@@ -33,6 +33,7 @@ import {
   getOfflinePaintQueue,
   getOfflineEraseQueue,
   getOfflineQueueStats,
+  importOfflineTransferPayload,
   importOfflineTransferFromWindowName,
   offlineGpsPingsToVisitEvents,
   removeOfflineGpsPings,
@@ -52,6 +53,9 @@ import {
 // Pure-native Capacitor plugin — no JS bundle to import; accessed via the native bridge.
 // Safe to register at module level: returns a no-op proxy on web (never called outside isNativePlatform()).
 const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>("BackgroundGeolocation");
+const OfflineHandoff = registerPlugin<{
+  getPendingPayload: () => Promise<{ payload?: string | null }>;
+}>("OfflineHandoff");
 
 /** Native background tracking: fewer GPS wakeups (larger = less frequent fixes, better battery). */
 const NATIVE_DISTANCE_FILTER_M = 48;
@@ -282,10 +286,28 @@ export default function MapApp() {
 
   // Initial data load
   useEffect(() => {
-    if (importOfflineTransferFromWindowName()) {
-      refreshOfflineStats();
+    let cancelled = false;
+    async function importTransfersAndLoad() {
+      let imported = importOfflineTransferFromWindowName();
+
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const { payload } = await OfflineHandoff.getPendingPayload();
+          if (payload) {
+            imported = importOfflineTransferPayload(JSON.parse(payload)) || imported;
+          }
+        } catch {
+          /* Native handoff plugin is Android-only and best-effort. */
+        }
+      }
+
+      if (imported) refreshOfflineStats();
+      if (!cancelled) void loadRemoteData(true);
     }
-    void loadRemoteData(true);
+    void importTransfersAndLoad();
+    return () => {
+      cancelled = true;
+    };
   }, [loadRemoteData, refreshOfflineStats]);
 
   // First launch on native shell: explain notifications + battery before tracking starts.

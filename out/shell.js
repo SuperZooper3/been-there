@@ -15180,10 +15180,11 @@
     return null;
   }
 
-  // offline-shell/entry.ts
-  var REMOTE_ORIGIN = true ? "https://been-there-maps.vercel.app" : "https://been-there-maps.vercel.app";
-  var BackgroundGeolocation = registerPlugin("BackgroundGeolocation");
-  var NATIVE_DISTANCE_FILTER_M = 48;
+	  // offline-shell/entry.ts
+	  var REMOTE_ORIGIN = true ? "https://been-there-maps.vercel.app" : "https://been-there-maps.vercel.app";
+	  var BackgroundGeolocation = registerPlugin("BackgroundGeolocation");
+	  var OfflineHandoff = registerPlugin("OfflineHandoff");
+	  var NATIVE_DISTANCE_FILTER_M = 48;
   function el(id) {
     const n = document.getElementById(id);
     if (!n) throw new Error(`#${id} missing`);
@@ -15233,13 +15234,22 @@
 	      readSealedBatches(),
 	      readOpenBatch()
 	    ]);
-	    window.name = `${OFFLINE_TRANSFER_PREFIX}${JSON.stringify({
+	    return JSON.stringify({
 	      gpsPings,
 	      paints,
 	      erases,
 	      visitBatches,
 	      openBatch
-	    })}`;
+	    });
+	  }
+	  async function openFullApp() {
+	    const payload = await prepareTransferToFullApp();
+	    try {
+	      await OfflineHandoff.openRemoteApp({ payload });
+	    } catch {
+	      window.name = `${OFFLINE_TRANSFER_PREFIX}${payload}`;
+	      window.location.replace(`${REMOTE_ORIGIN}/`);
+	    }
 	  }
 	  var watcherId = null;
 	  var prev = { lat: null, lng: null };
@@ -15325,8 +15335,7 @@
 	    const ok = await probeReachable(REMOTE_ORIGIN, 5e3);
 	    if (ok) {
 	      el("status").textContent = "Opening full app\u2026";
-	      await prepareTransferToFullApp();
-	      window.location.replace(`${REMOTE_ORIGIN}/`);
+	      await openFullApp();
 	      return true;
 	    }
     return false;
@@ -15351,9 +15360,7 @@
       void refreshUi();
     }, 45e3);
 	    el("btnOpenApp").addEventListener("click", () => {
-	      void prepareTransferToFullApp().then(() => {
-	        window.location.replace(`${REMOTE_ORIGIN}/`);
-	      });
+	      void openFullApp();
 	    });
 	    el("btnRetry").addEventListener("click", async () => {
 	      if (await tryRedirectToFullApp()) return;

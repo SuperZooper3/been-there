@@ -17,14 +17,17 @@ const config: CapacitorConfig = {
   // Production boots the bundled offline shell first. The shell redirects to the
   // hosted app when online and records locally when the phone cold-starts offline.
   webDir: 'out',
-  ...(devServerUrl
-    ? {
-        server: {
+  server: {
+    // Keep the hosted app inside the Capacitor WebView after the local offline
+    // shell redirects; otherwise Android may hand the URL to the system browser.
+    allowNavigation: ['been-there-maps.vercel.app'],
+    ...(devServerUrl
+      ? {
           url: devServerUrl,
           cleartext: true, // allow HTTP for local dev (Android); iOS needs NSAllowsLocalNetworking in Info.plist
-        },
-      }
-    : {}),
+        }
+      : {}),
+  },
   plugins: {
     // Key name verified against @capacitor-community/background-geolocation README.
     // If Android shows a blank notification title, this key name may need adjusting.
