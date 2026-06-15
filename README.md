@@ -11,6 +11,10 @@ Your map is not publicly posted or shared with other people. To work, the app do
 ## What it looks like
 
 <p align="center">
+  <img src="public/showcase/been-there-landing.png" width="920" alt="Been There landing page with Polaroid-style app screenshots around the sign-in form">
+</p>
+
+<p align="center">
   <img src="public/showcase/been-there-map.png" width="820" alt="Been There map of San Francisco with visited cells and photo pins">
 </p>
 
