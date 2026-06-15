@@ -3,11 +3,13 @@ import "./globals.css";
 import ServiceWorker from "@/components/ServiceWorker";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://beenthere.app";
+const description =
+  "A private map-memory app for coloring in places you have visited and pinning photo memories.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "Been There",
-  description: "Fill out the map by visiting places.",
+  description,
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -30,20 +32,20 @@ export const metadata: Metadata = {
     type: "website",
     url: siteUrl,
     title: "Been There",
-    description: "Fill out the map by visiting places.",
+    description,
     siteName: "Been There",
     images: [
       {
-        url: "/been-there-long.png",
-        alt: "Been There",
+        url: "/showcase/been-there-map.png",
+        alt: "Been There map with explored places and photo pins",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Been There",
-    description: "Fill out the map by visiting places.",
-    images: ["/been-there-long.png"],
+    description,
+    images: ["/showcase/been-there-map.png"],
   },
 };
 

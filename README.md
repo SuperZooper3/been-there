@@ -1,8 +1,26 @@
-![Been There](/public/been-there-long.png)
+![Been There](public/been-there-long.png)
 
 Fill out the map by visiting places.
 
-Been There is a map-based memory app where you color in real-world areas you've explored and drop photo pins to remember places. As you visit streets, neighborhoods, cities, and regions, explored areas light up — turning the world into a personal exploration record.
+Been There is a private map-memory app where you color in real-world areas you've explored and drop photo pins to remember places. As you visit streets, neighborhoods, cities, and regions, explored areas light up, turning the world into a personal exploration record.
+
+The big idea is simple: your map becomes a scrapbook of where life happened. Been There stores visited areas as H3 hexagons, lets GPS or manual drawing fill in the map, and keeps photo memories anchored to the places where they belong.
+
+Your map is not publicly posted or shared with other people. To work, the app does receive your location and stores it on the server so your private map can sync across devices.
+
+## What it looks like
+
+<p align="center">
+  <img src="public/showcase/been-there-map.png" width="820" alt="Been There map of San Francisco with visited cells and photo pins">
+</p>
+
+| Regional view | World view |
+|---|---|
+| <img src="public/showcase/been-there-region.png" alt="Been There regional map showing visited areas across the Bay Area"> | <img src="public/showcase/been-there-world.png" alt="Been There continent-scale map showing visited areas across North America"> |
+
+| Intelligence overlays | Photo memories |
+|---|---|
+| <img src="public/showcase/been-there-intelligence.png" alt="Been There intelligence mode heatmap over San Francisco"> | <img src="public/showcase/been-there-polaroid.png" alt="Been There Polaroid photo memory opened on the map"> |
 
 ---
 
